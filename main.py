@@ -1,10 +1,13 @@
 import flask
 import openai
 import json
+import io
+import csv
 
 app = flask.Flask(__name__)
 
 API_KEY = json.load(open("config.json", "r"))["openai_api_credentials"]["api_key"]
+global csv_header
 
 
 def verify_config_file():
@@ -21,9 +24,28 @@ def verify_config_file():
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
-    """Upload a csv file with patient data and redirect to the page with the results of the GPT-3 API"""
+    """Upload a csv file with patient data and redirect to the page with the results of the GPT-3 API
+    after reading the csv file and extracting the header."""
 
-    pass
+    if flask.request.method == 'GET':
+        return flask.render_template("upload.html")
+    else:
+        file = flask.request.files['csv']
+
+        if file and file.filename.endswith('.csv'):
+            # Read the CSV file directly from the uploaded file object
+            csv_data = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+
+            csv_reader = csv.reader(csv_data)
+
+            csv_header = next(csv_reader)
+
+            del csv_reader
+            del csv_data
+
+            return f"CSV header: {csv_header}"
+        else:
+            return 'Please upload a CSV file'
 
 
 @app.route('/', methods=['GET'])
