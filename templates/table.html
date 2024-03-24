@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Response</title>
+</head>
+<body>
+    <h1>Generated Patient Database</h1>
+    <table border="1">
+        <thead>
+            <tr>
+                {% for header in headers %}
+                <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in data %}
+            <tr>
+                {% for attribute in record %}
+                <td>{{ attribute }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <br>
+    <a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
+
+</body>
+</html>

@@ -61,9 +61,6 @@ def generate_prompt():
         return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path)
 
 
-        csv_data.seek(0)
-        return flask.render_template("table.html", headers=headers, data=data_list, csv_data=csv_data)
-
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
