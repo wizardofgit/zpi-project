@@ -7,8 +7,6 @@ import csv
 app = flask.Flask(__name__)
 
 API_KEY = json.load(open("config.json", "r"))["openai_api_credentials"]["api_key"]
-global csv_header
-
 
 def verify_config_file():
     """Verify if the config file exists and contains the openai_api_credentials"""
@@ -20,6 +18,32 @@ def verify_config_file():
                 raise "No openai_key found in config file"
     except FileNotFoundError:
         raise "No config file found"
+
+@app.route('/generate', methods=['GET', 'POST'])
+def generate_prompt():
+    if flask.request.method == 'GET':
+        return flask.render_template("prompt_ask.html")
+    else:
+        prompt = (f"Generate a synthetic pataient database with {int(flask.request.form['number_of_records'])}"
+                  f" records containing the following columns: {', '.join(csv_header)}")
+        print(f"Prompt: {prompt}")
+
+        client = openai.Client(api_key=API_KEY)
+
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {'role': 'system', 'content': 'You are a data scientist working at a hospital. You need to generate a synthetic patient database '
+                                              'that contain relevant information about the patients and their test results. The database should contain '
+                                              'columns that are listed in the prompt. Make sure that the data is realistic and can be used for testing purposes.'
+                                              'It must contain realistic relationships between the columns.'},
+                {'role': 'user', 'content': prompt}
+            ]
+        )
+
+        client.close()
+
+        return response.choices[0].message.content
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -37,13 +61,13 @@ def upload_file():
             csv_data = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
 
             csv_reader = csv.reader(csv_data)
-
+            global csv_header
             csv_header = next(csv_reader)
 
             del csv_reader
             del csv_data
 
-            return f"CSV header: {csv_header}"
+            return flask.redirect("/generate")
         else:
             return 'Please upload a CSV file'
 
