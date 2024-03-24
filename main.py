@@ -3,6 +3,7 @@ import openai
 import json
 import io
 import csv
+import tempfile
 
 app = flask.Flask(__name__)
 
@@ -25,7 +26,7 @@ def generate_prompt():
         return flask.render_template("prompt_ask.html")
     else:
         prompt = (f"Generate a synthetic pataient database with {int(flask.request.form['number_of_records'])}"
-                  f" records containing the following columns: {', '.join(csv_header)}")
+                  f" records containing the following columns: {', '.join(csv_header)}, please use ',' as separator.")
         print(f"Prompt: {prompt}")
 
         client = openai.Client(api_key=API_KEY)
@@ -43,7 +44,25 @@ def generate_prompt():
 
         client.close()
 
-        return response.choices[0].message.content
+        headers = ', '.join(csv_header).split(';')
+        data_str = response.choices[0].message.content
+        data_list = data_str.split("\n")
+        for i in range(len(data_list)):
+            data_list[i] = data_list[i].split(",")
+        data_list.pop(0)
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as temp_file:
+            csv_writer = csv.writer(temp_file)
+            csv_writer.writerow(headers)
+            csv_writer.writerows(data_list)
+            temp_file_path = temp_file.name
+
+        # Przekazanie danych do HTML template
+        return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path)
+
+
+        csv_data.seek(0)
+        return flask.render_template("table.html", headers=headers, data=data_list, csv_data=csv_data)
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -100,6 +119,13 @@ def generic_prompt():
 
     return response.choices[0].message.content
 
+@app.route('/download_csv')
+def download_csv():
+    csv_file = flask.request.args.get('csv_file')
+    if csv_file:
+        return flask.send_file(csv_file, mimetype='text/csv', as_attachment=True, download_name='generated_data.csv')
+    else:
+        return "Error: CSV file not found"
 
 if __name__ == '__main__':
     verify_config_file()
