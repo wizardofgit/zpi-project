@@ -48,10 +48,6 @@ def calculate_summary(data_list):
     num_male_records = len(male_heights)
     num_female_records = len(female_heights)
 
-    print(f"Number of male records: {num_male_records}, Male heights: {male_heights}, Male weights: {male_weights}")
-    print(
-        f"Number of female records: {num_female_records}, Female heights: {female_heights}, Female weights: {female_weights}")
-
     average_male_height = round(sum(male_heights) / num_male_records, 2) if num_male_records > 0 else 0
     average_male_weight = round(sum(male_weights) / num_male_records, 2) if num_male_records > 0 else 0
 
