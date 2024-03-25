@@ -101,7 +101,7 @@ def generate_prompt():
         print(headers, data_list)
 
         # Pass data to HTML template
-        return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path,
+        return flask.render_template("table.html", headers=csv_header, data=data_list, csv_file=temp_file_path,
                                      total_records=total_records,
                                      num_male_records=num_male_records, average_male_weight=average_male_weight,
                                      average_male_height=average_male_height, num_female_records=num_female_records,
