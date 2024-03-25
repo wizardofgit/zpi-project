@@ -3,30 +3,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Response</title>
+    <title>Generated Patient Database</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        canvas {
+            max-width: 300px;
+            max-height: 200px;
+            width: 100%;
+            height: auto;
+        }
+    </style>
 </head>
 <body>
-    <h1>Generated Patient Database</h1>
-    <table border="1">
-        <thead>
-            <tr>
-                {% for header in headers %}
-                <th>{{ header }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for record in data %}
-            <tr>
-                {% for attribute in record %}
-                <td>{{ attribute }}</td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    <br>
-    <a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
+<h1>Generated Patient Database</h1>
+<table border="1">
+    <thead>
+    <tr>
+        {% for header in headers %}
+        <th>{{ header }}</th>
+        {% endfor %}
+    </tr>
+    </thead>
+    <tbody>
+    {% for record in data %}
+    <tr>
+        {% for attribute in record %}
+        <td>{{ attribute }}</td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<br>
+<p>Summary:</p>
+<ul>
+    <li>Total number of records: {{ total_records }}</li>
+    {% if num_male_records > 0 %}
+    <ul>
+        <li>Male:
+            <ul>
+                <li>Number of records: {{ num_male_records }}</li>
+                <li>Average weight: {{ average_male_weight }}</li>
+                <li>Average height: {{ average_male_height }}</li>
+            </ul>
+        </li>
+    </ul>
+    {% endif %}
+    {% if num_female_records > 0 %}
+    <ul>
+        <li>Female:
+            <ul>
+                <li>Number of records: {{ num_female_records }}</li>
+                <li>Average weight: {{ average_female_weight }}</li>
+                <li>Average height: {{ average_female_height }}</li>
+            </ul>
+        </li>
+    </ul>
+    {% endif %}
+</ul>
+<br>
+<canvas id="genderHistogram"></canvas>
 
+<script>
+    // Dane dla histogramu
+    const data = {
+        labels: ['Male', 'Female'],
+        datasets: [{
+            label: 'Number of Records', // Etykieta dla serii danych
+            data: [{{ num_male_records }}, {{ num_female_records }}], // Dane liczbowe z Pythona
+            backgroundColor: ['blue', 'pink'] // Kolory słupków
+        }]
+    };
+
+    // Konfiguracja histogramu
+    const config = {
+        type: 'bar',
+        data: data,
+        options: {
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Gender Distribution', // Tytuł dla całego wykresu
+                    font: {
+                        size: 20, // Rozmiar czcionki
+                        weight: 'bold' // Pogrubienie czcionki
+                    }
+                },
+                legend: {
+                    display: false // Ukrycie legendy
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true, // Ustawienie początku osi Y na 0
+                    title: { // Dodanie tytułu dla osi Y
+                        display: true,
+                        text: 'Number of Records'
+                    }
+                }
+            }
+        }
+    };
+
+    // Utworzenie wykresu
+    var genderHistogram = new Chart(
+        document.getElementById('genderHistogram'),
+        config
+    );
+</script>
+<br>
+<a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
 </body>
 </html>

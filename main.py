@@ -22,6 +22,46 @@ def verify_config_file():
         raise "No config file found"
 
 
+def calculate_summary(data_list):
+    male_heights = []
+    male_weights = []
+    female_heights = []
+    female_weights = []
+
+    for record in data_list:
+        try:
+            weight_str, height_str, gender = record
+
+            weight = int(weight_str.split()[0])
+            height = int(height_str.split()[0])
+            gender = gender.strip().lower()
+
+            if gender == 'male':
+                male_heights.append(height)
+                male_weights.append(weight)
+            elif gender == 'female':
+                female_heights.append(height)
+                female_weights.append(weight)
+        except (ValueError, IndexError) as e:
+            print(f"Error processing record: {record}, Error: {e}")
+            continue
+
+    num_male_records = len(male_heights)
+    num_female_records = len(female_heights)
+
+    print(f"Number of male records: {num_male_records}, Male heights: {male_heights}, Male weights: {male_weights}")
+    print(
+        f"Number of female records: {num_female_records}, Female heights: {female_heights}, Female weights: {female_weights}")
+
+    average_male_height = round(sum(male_heights) / num_male_records, 2) if num_male_records > 0 else 0
+    average_male_weight = round(sum(male_weights) / num_male_records, 2) if num_male_records > 0 else 0
+
+    average_female_height = round(sum(female_heights) / num_female_records, 2) if num_female_records > 0 else 0
+    average_female_weight = round(sum(female_weights) / num_female_records, 2) if num_female_records > 0 else 0
+
+    return num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight
+
+
 @app.route('/generate', methods=['GET', 'POST'])
 def generate_prompt():
     if flask.request.method == 'GET':
@@ -54,14 +94,24 @@ def generate_prompt():
             data_list[i] = data_list[i].split(",")
         data_list.pop(0)
 
+        num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
+            data_list)
+        total_records = len(data_list)
+
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as temp_file:
             csv_writer = csv.writer(temp_file)
             csv_writer.writerow(headers)
             csv_writer.writerows(data_list)
             temp_file_path = temp_file.name
+        print(headers, data_list)
 
-        # Przekazanie danych do HTML template
-        return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path)
+        # Pass data to HTML template
+        return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path,
+                                     total_records=total_records,
+                                     num_male_records=num_male_records, average_male_weight=average_male_weight,
+                                     average_male_height=average_male_height, num_female_records=num_female_records,
+                                     average_female_weight=average_female_weight,
+                                     average_female_height=average_female_height)
 
 
 @app.route('/upload', methods=['GET', 'POST'])
