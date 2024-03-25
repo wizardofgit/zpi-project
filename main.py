@@ -9,6 +9,7 @@ app = flask.Flask(__name__)
 
 API_KEY = json.load(open("config.json", "r"))["openai_api_credentials"]["api_key"]
 
+
 def verify_config_file():
     """Verify if the config file exists and contains the openai_api_credentials"""
     try:
@@ -20,12 +21,13 @@ def verify_config_file():
     except FileNotFoundError:
         raise "No config file found"
 
+
 @app.route('/generate', methods=['GET', 'POST'])
 def generate_prompt():
     if flask.request.method == 'GET':
         return flask.render_template("prompt_ask.html")
     else:
-        prompt = (f"Generate a synthetic pataient database with {int(flask.request.form['number_of_records'])}"
+        prompt = (f"Generate a synthetic patient database with {int(flask.request.form['number_of_records'])}"
                   f" records containing the following columns: {', '.join(csv_header)}, please use ',' as separator.")
         print(f"Prompt: {prompt}")
 
@@ -34,10 +36,11 @@ def generate_prompt():
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {'role': 'system', 'content': 'You are a data scientist working at a hospital. You need to generate a synthetic patient database '
-                                              'that contain relevant information about the patients and their test results. The database should contain '
-                                              'columns that are listed in the prompt. Make sure that the data is realistic and can be used for testing purposes.'
-                                              'It must contain realistic relationships between the columns.'},
+                {'role': 'system',
+                 'content': 'You are a data scientist working at a hospital. You need to generate a synthetic patient database '
+                            'that contain relevant information about the patients and their test results. The database should contain '
+                            'columns that are listed in the prompt. Make sure that the data is realistic and can be used for testing purposes.'
+                            'It must contain realistic relationships between the columns.'},
                 {'role': 'user', 'content': prompt}
             ]
         )
@@ -59,7 +62,6 @@ def generate_prompt():
 
         # Przekazanie danych do HTML template
         return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path)
-
 
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -116,6 +118,7 @@ def generic_prompt():
 
     return response.choices[0].message.content
 
+
 @app.route('/download_csv')
 def download_csv():
     csv_file = flask.request.args.get('csv_file')
@@ -123,6 +126,7 @@ def download_csv():
         return flask.send_file(csv_file, mimetype='text/csv', as_attachment=True, download_name='generated_data.csv')
     else:
         return "Error: CSV file not found"
+
 
 if __name__ == '__main__':
     verify_config_file()
