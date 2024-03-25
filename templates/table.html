@@ -65,17 +65,15 @@
 <canvas id="genderHistogram"></canvas>
 
 <script>
-    // Dane dla histogramu
     const data = {
         labels: ['Male', 'Female'],
         datasets: [{
-            label: 'Number of Records', // Etykieta dla serii danych
-            data: [{{ num_male_records }}, {{ num_female_records }}], // Dane liczbowe z Pythona
-            backgroundColor: ['blue', 'pink'] // Kolory słupków
+            label: 'Number of Records',
+            data: [{{ num_male_records }}, {{ num_female_records }}],
+            backgroundColor: ['blue', 'pink']
         }]
     };
 
-    // Konfiguracja histogramu
     const config = {
         type: 'bar',
         data: data,
@@ -83,19 +81,19 @@
             plugins: {
                 title: {
                     display: true,
-                    text: 'Gender Distribution', // Tytuł dla całego wykresu
+                    text: 'Gender Distribution',
                     font: {
-                        size: 20, // Rozmiar czcionki
-                        weight: 'bold' // Pogrubienie czcionki
+                        size: 20,
+                        weight: 'bold'
                     }
                 },
                 legend: {
-                    display: false // Ukrycie legendy
+                    display: false
                 }
             },
             scales: {
                 y: {
-                    beginAtZero: true, // Ustawienie początku osi Y na 0
+                    beginAtZero: true,
                     title: { // Dodanie tytułu dla osi Y
                         display: true,
                         text: 'Number of Records'
@@ -105,7 +103,6 @@
         }
     };
 
-    // Utworzenie wykresu
     var genderHistogram = new Chart(
         document.getElementById('genderHistogram'),
         config
