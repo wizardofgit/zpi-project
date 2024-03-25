@@ -43,7 +43,6 @@ def calculate_summary(data_list):
                 female_heights.append(height)
                 female_weights.append(weight)
         except (ValueError, IndexError) as e:
-            print(f"Error processing record: {record}, Error: {e}")
             continue
 
     num_male_records = len(male_heights)
