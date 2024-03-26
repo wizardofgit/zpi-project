@@ -4,6 +4,8 @@ import json
 import io
 import csv
 import tempfile
+from fpdf import FPDF
+from matplotlib import pyplot as plt
 
 app = flask.Flask(__name__)
 
@@ -22,39 +24,139 @@ def verify_config_file():
         raise "No config file found"
 
 
-def calculate_summary(data_list):
+def calculate_summary(data_list, headers):
     male_heights = []
     male_weights = []
     female_heights = []
     female_weights = []
 
+    weight_index = None
+    height_index = None
+    gender_index = None
+
+    for i, column_name in enumerate(headers):
+        if 'weight' in column_name.lower():
+            weight_index = i
+        elif 'height' in column_name.lower():
+            height_index = i
+        elif 'gender' in column_name.lower() or 'sex' in column_name.lower():
+            gender_index = i
+
     for record in data_list:
         try:
-            weight_str, height_str, gender = record
+            if weight_index is not None:
+                weight_str = record[weight_index]
+                weight = int(weight_str.split()[0])
+                male_weights.append(weight) if record[gender_index].strip().lower() in ['male',
+                                                                                        'm'] else female_weights.append(
+                    weight)
 
-            weight = int(weight_str.split()[0])
-            height = int(height_str.split()[0])
-            gender = gender.strip().lower()
-
-            if gender == 'male':
-                male_heights.append(height)
-                male_weights.append(weight)
-            elif gender == 'female':
-                female_heights.append(height)
-                female_weights.append(weight)
-        except (ValueError, IndexError) as e:
+            if height_index is not None:
+                height_str = record[height_index]
+                height = int(height_str.split()[0])
+                male_heights.append(height) if record[gender_index].strip().lower() in ['male',
+                                                                                        'm'] else female_heights.append(
+                    height)
+        except (ValueError, IndexError):
             continue
 
-    num_male_records = len(male_heights)
-    num_female_records = len(female_heights)
+    num_male_records = max(len(male_heights), len(male_weights))
+    num_female_records = max(len(female_heights), len(female_weights))
 
-    average_male_height = round(sum(male_heights) / num_male_records, 2) if num_male_records > 0 else 0
-    average_male_weight = round(sum(male_weights) / num_male_records, 2) if num_male_records > 0 else 0
+    average_male_weight = round(sum(male_weights) / len(male_weights), 2) if male_weights else 0
+    average_male_height = round(sum(male_heights) / len(male_heights), 2) if male_heights else 0
 
-    average_female_height = round(sum(female_heights) / num_female_records, 2) if num_female_records > 0 else 0
-    average_female_weight = round(sum(female_weights) / num_female_records, 2) if num_female_records > 0 else 0
+    average_female_weight = round(sum(female_weights) / len(female_weights), 2) if female_weights else 0
+    average_female_height = round(sum(female_heights) / len(female_heights), 2) if female_heights else 0
 
     return num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight
+
+
+def generate_pdf_from_data(headers, data_list, summary_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    for header in headers:
+        pdf.set_font("Arial", size=12, style='B')
+        pdf.cell(40, 10, header, border=1)
+    pdf.ln()
+
+    for row in data_list:
+        for item in row:
+            pdf.set_font("Arial", size=12)
+            pdf.cell(40, 10, str(item), border=1)
+        pdf.ln()
+
+    pdf.ln()
+    pdf.set_font("Arial", size=14, style='B')
+    pdf.cell(0, 10, "Summary", ln=True)
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(0, 10, f"Total number of records: {summary_data['total_records']}", ln=True)
+
+    def replace_zero_with_dash(value):
+        return "--" if value == 0 else str(value) + ' kg'
+
+    def format_height(height):
+        return f"{height} cm" if height >= 3 else f"{height} m"
+
+    if summary_data['num_male_records'] > 0:
+        pdf.cell(10)
+        pdf.cell(0, 10, "a) Male:", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Number of records: {summary_data['num_male_records']}", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Average weight: {replace_zero_with_dash(summary_data['average_male_weight'])}", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Average height: {format_height(summary_data['average_male_height'])}", ln=True)
+
+    if summary_data['num_female_records'] > 0:
+        pdf.cell(10)
+        pdf.cell(0, 10, "b) Female:", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Number of records: {summary_data['num_female_records']}", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Average weight: {replace_zero_with_dash(summary_data['average_female_weight'])}", ln=True)
+        pdf.cell(20)
+        pdf.cell(0, 10, f"- Average height: {format_height(summary_data['average_female_height'])}", ln=True)
+
+    plt.figure(figsize=(6, 4))
+    labels = []
+    sizes = []
+
+    if summary_data['num_male_records'] > 0:
+        labels.append('Male')
+        sizes.append(summary_data['num_male_records'])
+
+    if summary_data['num_female_records'] > 0:
+        labels.append('Female')
+        sizes.append(summary_data['num_female_records'])
+
+    colors = ['skyblue', 'pink']
+    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
+    plt.axis('equal')
+    plt.title('Gender Distribution', fontweight='bold')
+
+    for text in plt.gca().texts:
+        if '%' in text.get_text():
+            text.set_fontsize(12)
+            text.set_weight('bold')
+
+    temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+    plt.savefig(temp_image_file.name)
+    plt.close()
+
+    if pdf.get_y() > 200:
+        pdf.add_page()
+
+    pdf.image(temp_image_file.name, x=10, y=pdf.get_y(), w=140)
+    pdf.ln()
+
+    with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
+        pdf.output(temp_file.name)
+
+    return temp_file.name
 
 
 @app.route('/generate', methods=['GET', 'POST'])
@@ -82,7 +184,10 @@ def generate_prompt():
 
         client.close()
 
+        # szybko naprawilem zeby wczytywac obydwa csv
         headers = ', '.join(csv_header).split(';')
+        if len(headers) == 1:
+            headers = headers[0].split(', ')
         data_str = response.choices[0].message.content
         data_list = data_str.split("\n")
         for i in range(len(data_list)):
@@ -90,7 +195,7 @@ def generate_prompt():
         data_list.pop(0)
 
         num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
-            data_list)
+            data_list, headers)
         total_records = len(data_list)
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as temp_file:
@@ -98,10 +203,22 @@ def generate_prompt():
             csv_writer.writerow(headers)
             csv_writer.writerows(data_list)
             temp_file_path = temp_file.name
-        print(headers, data_list)
+
+            # Wywołaj funkcję pomocniczą do generowania pliku PDF
+            # Wywołaj funkcję pomocniczą do generowania pliku PDF
+            pdf_file_path = generate_pdf_from_data(headers, data_list, {
+                'total_records': total_records,
+                'num_male_records': num_male_records,
+                'average_male_weight': average_male_weight,
+                'average_male_height': average_male_height,
+                'num_female_records': num_female_records,
+                'average_female_weight': average_female_weight,
+                'average_female_height': average_female_height
+            })
 
         # Pass data to HTML template
-        return flask.render_template("table.html", headers=csv_header, data=data_list, csv_file=temp_file_path,
+        return flask.render_template("table.html", headers=headers, data=data_list, csv_file=temp_file_path,
+                                     pdf_file=pdf_file_path,
                                      total_records=total_records,
                                      num_male_records=num_male_records, average_male_weight=average_male_weight,
                                      average_male_height=average_male_height, num_female_records=num_female_records,
@@ -126,7 +243,6 @@ def upload_file():
             csv_reader = csv.reader(csv_data)
             global csv_header
             csv_header = next(csv_reader)
-
             del csv_reader
             del csv_data
 
@@ -171,6 +287,15 @@ def download_csv():
         return flask.send_file(csv_file, mimetype='text/csv', as_attachment=True, download_name='generated_data.csv')
     else:
         return "Error: CSV file not found"
+
+
+@app.route('/download_pdf')
+def download_pdf():
+    pdf_file = flask.request.args.get('pdf_file')
+    if pdf_file:
+        return flask.send_file(pdf_file, mimetype='text/pdf', as_attachment=True, download_name='generated_data.pdf')
+    else:
+        return "Error: PDF file not found"
 
 
 if __name__ == '__main__':

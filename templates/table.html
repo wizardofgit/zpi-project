@@ -5,14 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generated Patient Database</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        canvas {
-            max-width: 300px;
-            max-height: 200px;
-            width: 100%;
-            height: auto;
-        }
-    </style>
 </head>
 <body>
 <h1>Generated Patient Database</h1>
@@ -43,8 +35,8 @@
         <li>Male:
             <ul>
                 <li>Number of records: {{ num_male_records }}</li>
-                <li>Average weight: {{ average_male_weight }}</li>
-                <li>Average height: {{ average_male_height }}</li>
+                <li>Average weight: {% if average_male_weight == 0 %}-{% else %}{{ average_male_weight }} kg{% endif %}</li>
+                <li>Average height: {% if average_male_height == 0 %}-{% else %}{{ average_male_height }}{% endif %} {% if average_male_height != 0 %}{{ "cm" if average_male_height >= 3 else "m" }}{% endif %}</li>
             </ul>
         </li>
     </ul>
@@ -54,15 +46,15 @@
         <li>Female:
             <ul>
                 <li>Number of records: {{ num_female_records }}</li>
-                <li>Average weight: {{ average_female_weight }}</li>
-                <li>Average height: {{ average_female_height }}</li>
+                <li>Average weight: {% if average_female_weight == 0 %}-{% else %}{{ average_female_weight }} kg{% endif %}</li>
+                <li>Average height: {% if average_female_height == 0 %}-{% else %}{{ average_female_height }}{% endif %} {% if average_female_height != 0 %}{{ "cm" if average_female_height >= 3 else "m" }}{% endif %}</li>
             </ul>
         </li>
     </ul>
     {% endif %}
 </ul>
 <br>
-<canvas id="genderHistogram"></canvas>
+<canvas id="genderPieChart"></canvas>
 
 <script>
     const data = {
@@ -75,7 +67,7 @@
     };
 
     const config = {
-        type: 'bar',
+        type: 'doughnut',
         data: data,
         options: {
             plugins: {
@@ -83,32 +75,28 @@
                     display: true,
                     text: 'Gender Distribution',
                     font: {
-                        size: 20,
+                        size: 12,
                         weight: 'bold'
                     }
                 },
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'bottom'
                 }
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    title: { // Dodanie tytułu dla osi Y
-                        display: true,
-                        text: 'Number of Records'
-                    }
-                }
-            }
+            aspectRatio: 1, // Ustawienie proporcji wykresu
+            responsive: false // Wyłączenie responsywności
         }
     };
 
-    var genderHistogram = new Chart(
-        document.getElementById('genderHistogram'),
+    var genderPieChart = new Chart(
+        document.getElementById('genderPieChart'),
         config
     );
 </script>
 <br>
 <a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
+<br>
+<a href="/download_pdf?pdf_file={{ pdf_file }}">Download PDF</a>
 </body>
 </html>
