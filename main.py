@@ -161,12 +161,36 @@ def generate_pdf_from_data(headers, data_list, summary_data):
 
 @app.route('/generate', methods=['GET', 'POST'])
 def generate_prompt():
+    global csv_header
+    global previous_data
+    global headers
+
     if flask.request.method == 'GET':
+        headers = False
         return flask.render_template("prompt_ask.html")
+
     else:
-        prompt = (f"Generate a synthetic patient database with {int(flask.request.form['number_of_records'])}"
-                  f" records containing the following columns: {', '.join(csv_header)}, please use ',' as separator.")
-        print(f"Prompt: {prompt}")
+        prompt = flask.request.form.get("prompt")
+        new_column_name = flask.request.form.get("new_column_name")
+        new_entries = flask.request.form.get("new_entries")
+        if new_column_name:
+            headers.append(new_column_name)
+            # headers.append(new_column_name)
+            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ';' as separator."
+                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
+                      f"Remember to make sure that entries make sense and have realistic realtionships with each other")
+
+        elif new_entries:
+            prompt = (f"Update this data set {previous_data} with {new_entries} new rows, please use ';' as separator."
+                      f"If the number of new entries is negtive delete entires going from end"
+                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
+                      f"Remember to make sure that entries make sense and have realistic realtionships with each other")
+        if not prompt:
+            prompt = (f"Generate a synthetic patient database with {int(flask.request.form['number_of_records'])}"
+                      f" records containing the following columns: {''.join(csv_header)}, please use ';' as separator."
+                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b"
+                      f"Remember to make sure that entries make sense and have realistic realtionships with each other")
+        # print(f"Prompt: {prompt}")
 
         client = openai.Client(api_key=API_KEY)
 
@@ -183,15 +207,18 @@ def generate_prompt():
         )
 
         client.close()
-
-        # szybko naprawilem zeby wczytywac obydwa csv
-        headers = ', '.join(csv_header).split(';')
-        if len(headers) == 1:
-            headers = headers[0].split(', ')
+        if headers is False:
+            # szybko naprawilem zeby wczytywac obydwa csv
+            headers = ','.join(csv_header).split(';')
+            if len(headers) == 1:
+                headers = headers[0].split(', ')
+            headers = list(filter(None, headers))
+        print(headers)
         data_str = response.choices[0].message.content
+        previous_data = data_str
         data_list = data_str.split("\n")
         for i in range(len(data_list)):
-            data_list[i] = data_list[i].split(",")
+            data_list[i] = data_list[i].split(";")
         data_list.pop(0)
 
         num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
@@ -204,7 +231,6 @@ def generate_prompt():
             csv_writer.writerows(data_list)
             temp_file_path = temp_file.name
 
-            # Wywołaj funkcję pomocniczą do generowania pliku PDF
             # Wywołaj funkcję pomocniczą do generowania pliku PDF
             pdf_file_path = generate_pdf_from_data(headers, data_list, {
                 'total_records': total_records,

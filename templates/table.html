@@ -26,8 +26,27 @@
     {% endfor %}
     </tbody>
 </table>
+<h2>Modify Data</h2>
+<form method="POST" action="/generate">
+  <input type="hidden" name="prompt" value="{{ prompt }}">
+  <input type="hidden" name="number_of_records" value="{{ total_records }}">
+  <button type="submit">Regenerate data</button>
+</form>
+
+<form method="POST" action="/generate">
+  <input type="hidden" name="prompt" value="{{ prompt }}">
+  <input type="hidden" name="number_of_records" value="{{ total_records }}">
+  <input type="text" id="new_column_name" name="new_column_name">
+  <button type="submit">Add new column</button>
+</form>
+<form method="POST" action="/generate">
+  <input type="hidden" name="prompt" value="{{ prompt }}">
+  <input type="hidden" name="number_of_records" value="{{ total_records }}">
+  <input type="text" id="new_entries" name="new_entries">
+  <button type="submit">Generate more entries</button>
+</form>
 <br>
-<p>Summary:</p>
+<h3>Summary:</h3>
 <ul>
     <li>Total number of records: {{ total_records }}</li>
     {% if num_male_records > 0 %}
