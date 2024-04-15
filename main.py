@@ -161,33 +161,34 @@ def generate_pdf_from_data(headers, data_list, summary_data):
 
 @app.route('/generate', methods=['GET', 'POST'])
 def generate_prompt():
-    global csv_header
     global previous_data
     global headers
 
-    if flask.request.method == 'GET':
-        headers = False
-        return flask.render_template("prompt_ask.html")
+    if 'headers' in flask.request.args:
+        headers = list(json.loads(flask.request.args['headers']))
 
+    if flask.request.method == 'GET':
+        return flask.render_template("prompt_ask.html")
     else:
         prompt = flask.request.form.get("prompt")
         new_column_name = flask.request.form.get("new_column_name")
         new_entries = flask.request.form.get("new_entries")
+
         if new_column_name:
             headers.append(new_column_name)
             # headers.append(new_column_name)
-            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ';' as separator."
+            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ',' as separator."
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
 
         elif new_entries:
-            prompt = (f"Update this data set {previous_data} with {new_entries} new rows, please use ';' as separator."
-                      f"If the number of new entries is negtive delete entires going from end"
+            prompt = (f"Generate {new_entries} with following headers: {headers}, please use ',' as separator."
+                      f"Make sure not to add headers."
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
         if not prompt:
             prompt = (f"Generate a synthetic patient database with {int(flask.request.form['number_of_records'])}"
-                      f" records containing the following columns: {''.join(csv_header)}, please use ';' as separator."
+                      f" records containing the following columns: {''.join(csv_header)}, please use ',' as separator."
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b"
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
         # print(f"Prompt: {prompt}")
@@ -201,25 +202,36 @@ def generate_prompt():
                  'content': 'You are a data scientist working at a hospital. You need to generate a synthetic patient database '
                             'that contain relevant information about the patients and their test results. The database should contain '
                             'columns that are listed in the prompt. Make sure that the data is realistic and can be used for testing purposes.'
-                            'It must contain realistic relationships between the columns.'},
+                            'It must contain realistic relationships between the columns. Do not use any type of numeration in the data.'},
                 {'role': 'user', 'content': prompt}
             ]
         )
 
         client.close()
-        if headers is False:
-            # szybko naprawilem zeby wczytywac obydwa csv
-            headers = ','.join(csv_header).split(';')
-            if len(headers) == 1:
-                headers = headers[0].split(', ')
-            headers = list(filter(None, headers))
+
+        # print("Headers: ", headers, "csv_header: ", csv_header)
+
+        # if headers is False:
+        #     # szybko naprawilem zeby wczytywac obydwa csv
+        #     headers = ','.join(csv_header).split(';')
+        #     if len(headers) == 1:
+        #         headers = headers[0].split(', ')
+        #     headers = list(filter(None, headers))
+
         print(headers)
         data_str = response.choices[0].message.content
-        previous_data = data_str
-        data_list = data_str.split("\n")
+        if new_entries:
+            previous_data += "\n" + data_str + "\n"
+        else:
+            previous_data = data_str
+        # print(previous_data)
+        data_list = previous_data.split("\n")
+        print(data_list)
         for i in range(len(data_list)):
-            data_list[i] = data_list[i].split(";")
+            data_list[i] = data_list[i].split(",")
         data_list.pop(0)
+        if data_list[-1] == '' or data_list[-1] == '\n' or data_list[-1] == ['']:
+            data_list.pop(-1)
 
         num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
             data_list, headers)
@@ -269,10 +281,15 @@ def upload_file():
             csv_reader = csv.reader(csv_data)
             global csv_header
             csv_header = next(csv_reader)
+            print(csv_header)
+            if ';' in csv_header[0]:
+                csv_header = csv_header[0].split(';')
             del csv_reader
             del csv_data
 
-            return flask.redirect("/generate")
+            print(json.dumps(csv_header))
+
+            return flask.redirect(f"/generate?headers={json.dumps(csv_header)}")
         else:
             return 'Please upload a CSV file'
 
