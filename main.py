@@ -188,7 +188,7 @@ def generate_prompt():
             prompt = (f"Generate {new_entries} with following headers: {headers}, please use ';' as separator."
                       f"Make sure not to add headers."
                       f"Make sure that new entries stay consistent with this data {previous_data} formatting wise"
-                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
+                      # f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
         if not prompt:
             prompt = (f"Generate a synthetic patient database with {records_to_generate}"
@@ -235,7 +235,7 @@ def generate_prompt():
             prompt = (f"Generate {to_generate} with following headers: {headers}, please use ';' as separator."
                       f"Make sure not to add headers."
                       f"Make sure that new entries stay consistent with this data {previous_data} formatting wise"
-                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
+                      # f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
 
             response = client.chat.completions.create(
