@@ -277,6 +277,7 @@ def generate_prompt():
 
         print("len of datalist:" , len(data_list), " ", data_list)
         # remove spaces in records
+        # Czy jest to potrzebne? Jeżeli tak to wypadałoby to zrobić tak by nie niszczyć tekstów ze spacjami. MS
         # for i in range(len(data_list)):
         #     for j in range(len(data_list[i])):
         #         data_list[i][j] = data_list[i][j].replace(" ", "")
