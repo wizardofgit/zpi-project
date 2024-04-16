@@ -178,19 +178,21 @@ def generate_prompt():
         if new_column_name:
             headers.append(new_column_name)
             # headers.append(new_column_name)
-            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ',' as separator."
+            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ';' as separator."
+                      f"Make sure that none of the previous data is lost adn entries stay teh same except for addition of new column"
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
 
         elif new_entries:
             records_to_generate += int(new_entries)
-            prompt = (f"Generate {new_entries} with following headers: {headers}, please use ',' as separator."
+            prompt = (f"Generate {new_entries} with following headers: {headers}, please use ';' as separator."
                       f"Make sure not to add headers."
+                      f"Make sure that new entries stay consistent with this data {previous_data} formatting wise"
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
         if not prompt:
             prompt = (f"Generate a synthetic patient database with {records_to_generate}"
-                      f" records containing the following columns: {''.join(csv_header)}, please use ',' as separator."
+                      f" records containing the following columns: {''.join(csv_header)}, please use ';' as separator."
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b"
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
         # print(f"Prompt: {prompt}")
@@ -219,7 +221,7 @@ def generate_prompt():
         data_list = previous_data.split("\n")
         print(data_list)
         for i in range(len(data_list)):
-            data_list[i] = data_list[i].split(",")
+            data_list[i] = data_list[i].split(";")
         data_list.pop(0)
 
         # making sure that chat returns the exact number of records requested
@@ -230,8 +232,9 @@ def generate_prompt():
             else:
                 to_generate = records_to_generate - len(data_list)
 
-            prompt = (f"Generate {to_generate} with following headers: {headers}, please use ',' as separator."
+            prompt = (f"Generate {to_generate} with following headers: {headers}, please use ';' as separator."
                       f"Make sure not to add headers."
+                      f"Make sure that new entries stay consistent with this data {previous_data} formatting wise"
                       f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
                       f"Remember to make sure that entries make sense and have realistic realtionships with each other")
 
@@ -248,9 +251,10 @@ def generate_prompt():
             )
 
             new_data_str = response.choices[0].message.content
+            previous_data += new_data_str
             new_data_list = new_data_str.split("\n")
             for i in range(len(new_data_list)):
-                data_list.append(new_data_list[i].split(","))
+                data_list.append(new_data_list[i].split(";"))
 
             print(new_data_list)
 
@@ -263,13 +267,19 @@ def generate_prompt():
                 indices_to_remove.append(i)
         for index in sorted(indices_to_remove, reverse=True):
             del data_list[index]
+        # remove empty headers
+        indices_to_remove = []
+        for i in range(len(headers)):
+            if headers[i] == '' or headers[i] == '\n' or headers[i] == ['']:
+                indices_to_remove.append(i)
+        for index in sorted(indices_to_remove, reverse=True):
+            del headers[index]
 
         print("len of datalist:" , len(data_list), " ", data_list)
-
         # remove spaces in records
-        for i in range(len(data_list)):
-            for j in range(len(data_list[i])):
-                data_list[i][j] = data_list[i][j].replace(" ", "")
+        # for i in range(len(data_list)):
+        #     for j in range(len(data_list[i])):
+        #         data_list[i][j] = data_list[i][j].replace(" ", "")
 
         num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
             data_list, headers)
