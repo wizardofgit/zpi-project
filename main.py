@@ -6,6 +6,10 @@ import csv
 import tempfile
 from fpdf import FPDF
 from matplotlib import pyplot as plt
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import re
 
 app = flask.Flask(__name__)
 
@@ -24,139 +28,139 @@ def verify_config_file():
         raise "No config file found"
 
 
-def calculate_summary(data_list, headers):
-    male_heights = []
-    male_weights = []
-    female_heights = []
-    female_weights = []
-
-    weight_index = None
-    height_index = None
-    gender_index = None
-
-    for i, column_name in enumerate(headers):
-        if 'weight' in column_name.lower():
-            weight_index = i
-        elif 'height' in column_name.lower():
-            height_index = i
-        elif 'gender' in column_name.lower() or 'sex' in column_name.lower():
-            gender_index = i
-
-    for record in data_list:
-        try:
-            if weight_index is not None:
-                weight_str = record[weight_index]
-                weight = int(weight_str.split()[0])
-                male_weights.append(weight) if record[gender_index].strip().lower() in ['male',
-                                                                                        'm'] else female_weights.append(
-                    weight)
-
-            if height_index is not None:
-                height_str = record[height_index]
-                height = int(height_str.split()[0])
-                male_heights.append(height) if record[gender_index].strip().lower() in ['male',
-                                                                                        'm'] else female_heights.append(
-                    height)
-        except (ValueError, IndexError):
-            continue
-
-    num_male_records = max(len(male_heights), len(male_weights))
-    num_female_records = max(len(female_heights), len(female_weights))
-
-    average_male_weight = round(sum(male_weights) / len(male_weights), 2) if male_weights else 0
-    average_male_height = round(sum(male_heights) / len(male_heights), 2) if male_heights else 0
-
-    average_female_weight = round(sum(female_weights) / len(female_weights), 2) if female_weights else 0
-    average_female_height = round(sum(female_heights) / len(female_heights), 2) if female_heights else 0
-
-    return num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight
-
-
-def generate_pdf_from_data(headers, data_list, summary_data):
+def generate_pdf_from_data(headers, data_list):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
+    pdf.set_font("Arial", size=8)
+    cell_width = 20  # Nowa szerokość komórki
     for header in headers:
-        pdf.set_font("Arial", size=12, style='B')
-        pdf.cell(40, 10, header, border=1)
+        pdf.set_font("Arial", size=8, style='B')
+        pdf.cell(cell_width, 10, header, border=1)
     pdf.ln()
 
+    unique_data_set = set()
+
+    # dlatego trzeba znalezc unikatowe, bo zauwazylem, ze kazdy wiersz sie zdublowal
+    print('Ile mamy wierszy danych: ', len(data_list))
     for row in data_list:
-        for item in row:
+        row_tuple = tuple(row)
+        if row_tuple not in unique_data_set:
+            for item in row:
+                pdf.set_font("Arial", size=8)
+                pdf.cell(cell_width, 10, str(item), border=1)
+            pdf.ln()
+            unique_data_set.add(row_tuple)
+
+    pdf.ln()
+
+    df = pd.DataFrame(unique_data_set, columns=headers)
+
+    df.drop_duplicates(inplace=True)
+
+    df = convert_to_numeric(df)
+
+    df.info()
+
+    for column in df.columns:
+        if df[column].dtype in ['int64', 'float64', 'int32']:
+            mean_val = df[column].mean()
+            median_val = df[column].median()
+            mode_val = df[column].mode()[0]
+            std_val = df[column].std()
+
+            pdf.set_font("Arial", size=12, style='B')
+            pdf.cell(0, 10, f"Statystyki kolumny {column}:", ln=True)
             pdf.set_font("Arial", size=12)
-            pdf.cell(40, 10, str(item), border=1)
-        pdf.ln()
+            pdf.cell(0, 10, f"srednia: {mean_val}", ln=True)
+            pdf.cell(0, 10, f"mediana: {median_val}", ln=True)
+            pdf.cell(0, 10, f"moda: {mode_val}", ln=True)
+            pdf.cell(0, 10, f"odchylenie standardowe: {std_val}", ln=True)
 
-    pdf.ln()
-    pdf.set_font("Arial", size=14, style='B')
-    pdf.cell(0, 10, "Summary", ln=True)
-    pdf.set_font("Arial", size=12)
+            unique_values = df[column].nunique()
+            if unique_values <= 2:
+                # Tworzymy wykres kołowy dla zmiennych numerycznych
+                plt.figure(figsize=(6, 4))
+                df[column].value_counts().plot(kind='pie', autopct='%1.1f%%')
+                plt.title(f"Wykres kołowy dla {column}")
+                plt.legend(labels=df[column].unique(), loc="best")
+                plt.axis('equal')
 
-    pdf.cell(0, 10, f"Total number of records: {summary_data['total_records']}", ln=True)
+                for text in plt.gca().texts:
+                    if '%' in text.get_text():
+                        text.set_fontsize(12)
+                        text.set_weight('bold')
 
-    def replace_zero_with_dash(value):
-        return "--" if value == 0 else str(value) + ' kg'
+                temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                plt.savefig(temp_image_file.name)
+                plt.close()
 
-    def format_height(height):
-        return f"{height} cm" if height >= 3 else f"{height} m"
+                if pdf.get_y() > 200:
+                    pdf.add_page()
 
-    if summary_data['num_male_records'] > 0:
-        pdf.cell(10)
-        pdf.cell(0, 10, "a) Male:", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Number of records: {summary_data['num_male_records']}", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Average weight: {replace_zero_with_dash(summary_data['average_male_weight'])}", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Average height: {format_height(summary_data['average_male_height'])}", ln=True)
+                pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
+                pdf.ln(100)
+            else:
+                plt.figure(figsize=(6, 4))
+                sns.boxplot(data=df, x=column)
+                plt.title(f"Wykres pudełkowy dla {column}")
+                plt.xlabel(column)
+                plt.ylabel("Wartość")
+                temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+                plt.savefig(temp_image_file.name)
+                plt.close()
 
-    if summary_data['num_female_records'] > 0:
-        pdf.cell(10)
-        pdf.cell(0, 10, "b) Female:", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Number of records: {summary_data['num_female_records']}", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Average weight: {replace_zero_with_dash(summary_data['average_female_weight'])}", ln=True)
-        pdf.cell(20)
-        pdf.cell(0, 10, f"- Average height: {format_height(summary_data['average_female_height'])}", ln=True)
+                if pdf.get_y() > 200:
+                    pdf.add_page()
 
-    plt.figure(figsize=(6, 4))
-    labels = []
-    sizes = []
+                pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
+                pdf.ln(100)
+        else:
+            plt.figure(figsize=(6, 4))
+            sns.histplot(data=df, x=column, discrete=True, stat='count')
+            plt.title(f"Histogram dla {column}")
+            plt.xlabel(column)
+            plt.ylabel("Liczba wystąpień")
 
-    if summary_data['num_male_records'] > 0:
-        labels.append('Male')
-        sizes.append(summary_data['num_male_records'])
+            values, counts = np.unique(df[column], return_counts=True)
 
-    if summary_data['num_female_records'] > 0:
-        labels.append('Female')
-        sizes.append(summary_data['num_female_records'])
+            x_labels = range(len(values))
 
-    colors = ['skyblue', 'pink']
-    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=colors)
-    plt.axis('equal')
-    plt.title('Gender Distribution', fontweight='bold')
+            plt.xticks(x_labels, [f'{i + 1}' for i in x_labels])
+            pdf.set_font("Arial", size=12, style='B')
+            pdf.cell(200, 10, txt=f"Legenda dla histogramu {column}", ln=True)
+            pdf.set_font("Arial", size=9)
+            for i, value in enumerate(values, start=1):
+                pdf.cell(200, 10, txt=f"{i}: {value}", ln=True)
 
-    for text in plt.gca().texts:
-        if '%' in text.get_text():
-            text.set_fontsize(12)
-            text.set_weight('bold')
+            temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            plt.savefig(temp_image_file.name)
+            plt.close()
 
-    temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-    plt.savefig(temp_image_file.name)
-    plt.close()
+            if pdf.get_y() > 200:
+                pdf.add_page()
 
-    if pdf.get_y() > 200:
-        pdf.add_page()
+            pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
 
-    pdf.image(temp_image_file.name, x=10, y=pdf.get_y(), w=140)
-    pdf.ln()
+            pdf.ln(100)
 
     with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
         pdf.output(temp_file.name)
 
     return temp_file.name
+
+
+def extract_numeric_value(text):
+    match = re.search(r'(\d+\.?\d*)', text)
+    if match:
+        return float(match.group())
+    else:
+        return text
+
+
+def convert_to_numeric(df):
+    for col in df.columns:
+        df[col] = df[col].apply(lambda x: extract_numeric_value(x))
+    return df
 
 
 @app.route('/generate', methods=['GET', 'POST'])
@@ -178,10 +182,11 @@ def generate_prompt():
         if new_column_name:
             headers.append(new_column_name)
             # headers.append(new_column_name)
-            prompt = (f"Update this data set {previous_data} with new column {new_column_name}, please use ';' as separator."
-                      f"Make sure that none of the previous data is lost adn entries stay teh same except for addition of new column"
-                      f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
-                      f"Remember to make sure that entries make sense and have realistic realtionships with each other")
+            prompt = (
+                f"Update this data set {previous_data} with new column {new_column_name}, please use ';' as separator."
+                f"Make sure that none of the previous data is lost adn entries stay teh same except for addition of new column"
+                f"Make sure that if there's a listing inside of a cell it's separated by a & eg: drug a & drug b."
+                f"Remember to make sure that entries make sense and have realistic realtionships with each other")
 
         elif new_entries:
             records_to_generate += int(new_entries)
@@ -275,16 +280,12 @@ def generate_prompt():
         for index in sorted(indices_to_remove, reverse=True):
             del headers[index]
 
-        print("len of datalist:" , len(data_list), " ", data_list)
+        print("len of datalist:", len(data_list), " ", data_list)
         # remove spaces in records
         # Czy jest to potrzebne? Jeżeli tak to wypadałoby to zrobić tak by nie niszczyć tekstów ze spacjami. MS
         # for i in range(len(data_list)):
         #     for j in range(len(data_list[i])):
         #         data_list[i][j] = data_list[i][j].replace(" ", "")
-
-        num_male_records, average_male_height, average_male_weight, num_female_records, average_female_height, average_female_weight = calculate_summary(
-            data_list, headers)
-        total_records = len(data_list)
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as temp_file:
             csv_writer = csv.writer(temp_file)
@@ -292,25 +293,14 @@ def generate_prompt():
             csv_writer.writerows(data_list)
             temp_file_path = temp_file.name
 
-            # Wywołaj funkcję pomocniczą do generowania pliku PDF
-            pdf_file_path = generate_pdf_from_data(headers, data_list, {
-                'total_records': total_records,
-                'num_male_records': num_male_records,
-                'average_male_weight': average_male_weight,
-                'average_male_height': average_male_height,
-                'num_female_records': num_female_records,
-                'average_female_weight': average_female_weight,
-                'average_female_height': average_female_height
-            })
+        # Wywołaj funkcję pomocniczą do generowania pliku PDF
+        pdf_file_path = generate_pdf_from_data(headers, data_list)
 
         # Pass data to HTML template
-        return flask.render_template("table.html", headers=headers, data=data_list[:records_to_generate], csv_file=temp_file_path,
+        return flask.render_template("table.html", headers=headers, data=data_list[:records_to_generate],
+                                     csv_file=temp_file_path,
                                      pdf_file=pdf_file_path,
-                                     total_records=records_to_generate,
-                                     num_male_records=num_male_records, average_male_weight=average_male_weight,
-                                     average_male_height=average_male_height, num_female_records=num_female_records,
-                                     average_female_weight=average_female_weight,
-                                     average_female_height=average_female_height)
+                                     total_records=records_to_generate)
 
 
 @app.route('/upload', methods=['GET', 'POST'])

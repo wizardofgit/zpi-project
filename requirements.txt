@@ -6,3 +6,7 @@ csv
 tempfile
 fpdf
 matplotlib
+seaborn
+pandas
+numpy
+re

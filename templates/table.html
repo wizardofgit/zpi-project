@@ -4,7 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generated Patient Database</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .boxplot-container {
+            width: 300px;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        .statistics-container {
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            max-width: 1000px;
+            max-height: 800px;
+            overflow: auto;
+            margin-bottom: 20px;
+        }
+    </style>
 </head>
 <body>
 <h1>Generated Patient Database</h1>
@@ -26,96 +43,262 @@
     {% endfor %}
     </tbody>
 </table>
+
 <h2>Modify Data</h2>
 <form method="POST" action="/generate">
-  <input type="hidden" name="prompt" value="{{ prompt }}">
-  <input type="hidden" name="number_of_records" value="{{ total_records }}">
-  <button type="submit">Regenerate data</button>
+    <input type="hidden" name="prompt" value="{{ prompt }}">
+    <input type="hidden" name="number_of_records" value="{{ total_records }}">
+    <button type="submit">Regenerate data</button>
 </form>
 
 <form method="POST" action="/generate">
-  <input type="hidden" name="prompt" value="{{ prompt }}">
-  <input type="hidden" name="number_of_records" value="{{ total_records }}">
-  <input type="text" id="new_column_name" name="new_column_name">
-  <button type="submit">Add new column</button>
+    <input type="hidden" name="prompt" value="{{ prompt }}">
+    <input type="hidden" name="number_of_records" value="{{ total_records }}">
+    <input type="text" id="new_column_name" name="new_column_name">
+    <button type="submit">Add new column</button>
 </form>
 <form method="POST" action="/generate">
-  <input type="hidden" name="prompt" value="{{ prompt }}">
-  <input type="hidden" name="number_of_records" value="{{ total_records }}">
-  <input type="text" id="new_entries" name="new_entries">
-  <button type="submit">Generate more entries</button>
+    <input type="hidden" name="prompt" value="{{ prompt }}">
+    <input type="hidden" name="number_of_records" value="{{ total_records }}">
+    <input type="text" id="new_entries" name="new_entries">
+    <button type="submit">Generate more entries</button>
 </form>
-<br>
-<h3>Summary:</h3>
-<ul>
-    <li>Total number of records: {{ total_records }}</li>
-    {% if num_male_records > 0 %}
-    <ul>
-        <li>Male:
-            <ul>
-                <li>Number of records: {{ num_male_records }}</li>
-                <li>Average weight: {% if average_male_weight == 0 %}-{% else %}{{ average_male_weight }} kg{% endif %}</li>
-                <li>Average height: {% if average_male_height == 0 %}-{% else %}{{ average_male_height }}{% endif %} {% if average_male_height != 0 %}{{ "cm" if average_male_height >= 3 else "m" }}{% endif %}</li>
-            </ul>
-        </li>
-    </ul>
-    {% endif %}
-    {% if num_female_records > 0 %}
-    <ul>
-        <li>Female:
-            <ul>
-                <li>Number of records: {{ num_female_records }}</li>
-                <li>Average weight: {% if average_female_weight == 0 %}-{% else %}{{ average_female_weight }} kg{% endif %}</li>
-                <li>Average height: {% if average_female_height == 0 %}-{% else %}{{ average_female_height }}{% endif %} {% if average_female_height != 0 %}{{ "cm" if average_female_height >= 3 else "m" }}{% endif %}</li>
-            </ul>
-        </li>
-    </ul>
-    {% endif %}
-</ul>
-<br>
-<canvas id="genderPieChart"></canvas>
+<h2>Box Plots and Statistics</h2>
+<div id="boxplot-statistics-container"></div>
 
 <script>
-    const data = {
-        labels: ['Male', 'Female'],
-        datasets: [{
-            label: 'Number of Records',
-            data: [{{ num_male_records }}, {{ num_female_records }}],
-            backgroundColor: ['blue', 'pink']
-        }]
-    };
+    var headers = document.querySelectorAll('thead th');
+    var dataRows = document.querySelectorAll('tbody tr');
+    var boxplotStatisticsContainer = document.getElementById('boxplot-statistics-container');
 
-    const config = {
-        type: 'doughnut',
-        data: data,
-        options: {
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Gender Distribution',
-                    font: {
-                        size: 12,
-                        weight: 'bold'
-                    }
-                },
-                legend: {
-                    display: true,
-                    position: 'bottom'
+    headers.forEach(function(header, index) {
+        var columnName = header.innerText;
+        var columnValues = [];
+        dataRows.forEach(function(row) {
+            var cell = row.cells[index];
+            var value = parseFloat(cell.innerText);
+            if (!isNaN(value)) {
+                columnValues.push(value);
+            }
+        });
+
+        var allNumeric = columnValues.every(function(value) {
+            return !isNaN(value);
+        });
+
+        if (allNumeric && columnValues.length > 0) {
+            var boxplotData = [{
+                y: columnValues,
+                type: 'box',
+                name: columnName
+            }];
+
+            var layout = {
+                title: 'Box Plot for ' + columnName,
+                yaxis: {
+                    title: 'Values'
                 }
-            },
-            aspectRatio: 1, // Ustawienie proporcji wykresu
-            responsive: false // Wyłączenie responsywności
-        }
-    };
+            };
 
-    var genderPieChart = new Chart(
-        document.getElementById('genderPieChart'),
-        config
-    );
+            var plotDiv = document.createElement('div');
+            plotDiv.classList.add('boxplot-container');
+            plotDiv.id = 'boxplot-' + index;
+            boxplotStatisticsContainer.appendChild(plotDiv);
+
+            Plotly.newPlot('boxplot-' + index, boxplotData, layout);
+
+            var average = calculateColumnAverage(columnValues);
+            var median = calculateColumnMedian(columnValues);
+            var mode = calculateColumnMode(columnValues);
+            var standardDeviation = calculateColumnStandardDeviation(columnValues);
+
+            var statistics = document.createElement('div');
+            statistics.classList.add('statistics-container');
+            statistics.innerHTML = '<strong>Statistics for ' + columnName + ':</strong><br>' +
+                                    'Average: ' + (isNaN(average) ? 'N/A' : average.toFixed(2)) + '<br>' +
+                                    'Median: ' + (isNaN(median) ? 'N/A' : median.toFixed(2)) + '<br>' +
+                                    'Mode: ' + (isNaN(mode) ? 'N/A' : mode) + '<br>' +
+                                    'Standard Deviation: ' + (isNaN(standardDeviation) ? 'N/A' : standardDeviation.toFixed(2)) + '<br><br>';
+            boxplotStatisticsContainer.appendChild(statistics);
+        }
+    });
+
+    function calculateColumnAverage(values) {
+        var sum = values.reduce((acc, val) => acc + val, 0);
+        return sum / values.length || NaN;
+    }
+
+    function calculateColumnMedian(values) {
+        values.sort((a, b) => a - b);
+        var middle = Math.floor(values.length / 2);
+        if (values.length % 2 === 0) {
+            return (values[middle - 1] + values[middle]) / 2 || NaN;
+        } else {
+            return values[middle] || NaN;
+        }
+    }
+
+    function calculateColumnMode(values) {
+        var frequencyMap = {};
+        values.forEach(function(value) {
+            frequencyMap[value] = frequencyMap[value] ? frequencyMap[value] + 1 : 1;
+        });
+        var maxFrequency = Math.max(...Object.values(frequencyMap));
+        return Object.keys(frequencyMap).find(key => frequencyMap[key] === maxFrequency) || NaN;
+    }
+
+    function calculateColumnStandardDeviation(values) {
+        var mean = calculateColumnAverage(values);
+        var variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length;
+        return Math.sqrt(variance) || NaN;
+    }
 </script>
-<br>
+
+<h2>Pie Charts and Histograms</h2>
+<script>
+    function generateHistogram(columnIndex) {
+        var values = [];
+        var rows = document.querySelectorAll('tbody tr');
+
+        rows.forEach(function(row) {
+            var cell = row.cells[columnIndex];
+            values.push(cell.innerText);
+        });
+
+        var uniqueValues = [...new Set(values)];
+
+        if (uniqueValues.length > 2) {
+            var frequencyMap = {};
+            values.forEach(function(value) {
+                if (frequencyMap[value]) {
+                    frequencyMap[value]++;
+                } else {
+                    frequencyMap[value] = 1;
+                }
+            });
+
+            var labels = Object.keys(frequencyMap);
+            var frequencies = Object.values(frequencyMap);
+
+            labels = labels.map(label => label.length > 20 ? label.substring(0, 20) + "..." : label); // Skróć etykiety
+
+            var ctx = document.createElement('canvas').getContext('2d');
+            ctx.canvas.width = 400;
+            ctx.canvas.height = 400;
+            var histogramChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data: frequencies,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Histogram for ' + headers[columnIndex].innerText,
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    aspectRatio: 1, // Zwiększ proporcje wykresu
+                    responsive: false // Wyłącz responsywność
+                }
+            });
+
+            var chartContainer = document.createElement('div');
+            chartContainer.classList.add('chart-container'); // Dodaj klasę dla kontenera
+            chartContainer.appendChild(ctx.canvas);
+            document.body.appendChild(chartContainer);
+        } else {
+            var colors = ['rgba(0, 128, 0, 0.5)', 'rgba(255, 165, 0, 0.5)'];
+            var data = [];
+            uniqueValues.forEach(function(value, i) {
+                var count = values.filter(function(v) {
+                    return v === value;
+                }).length;
+                data.push({
+                    label: value.length > 20 ? value.substring(0, 20) + "..." : value,
+                    value: count,
+                    backgroundColor: colors[i % colors.length]
+                });
+            });
+
+            var ctx = document.createElement('canvas').getContext('2d');
+            var pieChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: uniqueValues.map(v => v.length > 20 ? v.substring(0, 20) + "..." : v),
+                    datasets: [{
+                        data: data.map(d => d.value),
+                        backgroundColor: data.map(d => d.backgroundColor)
+                    }]
+                },
+                options: {
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Pie Chart for ' + headers[columnIndex].innerText,
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'bottom'
+                        }
+                    },
+                    aspectRatio: 1, // Zwiększ proporcje wykresu
+                    responsive: false // Wyłącz responsywność
+                }
+            });
+
+            var chartContainer = document.createElement('div');
+            chartContainer.classList.add('chart-container'); // Dodaj klasę dla kontenera
+            chartContainer.appendChild(ctx.canvas);
+            document.body.appendChild(chartContainer);
+        }
+
+    }
+
+    var headers = document.querySelectorAll('thead th');
+    headers.forEach(function(header, index) {
+        var columnName = header.innerText;
+        var columnValues = [];
+        var numericColumn = true;
+
+        dataRows.forEach(function(row, rowIndex) {
+            if (rowIndex > 0) {
+                var cell = row.cells[index];
+                var value = parseFloat(cell.innerText);
+                if (!isNaN(value)) {
+                    columnValues.push(value);
+                } else {
+                    numericColumn = false;
+                }
+            }
+        });
+
+        if (!numericColumn) {
+            generateHistogram(index);
+        }
+    });
+</script>
+
 <a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
 <br>
 <a href="/download_pdf?pdf_file={{ pdf_file }}">Download PDF</a>
+
 </body>
 </html>
