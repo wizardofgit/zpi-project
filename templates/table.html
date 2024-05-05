@@ -11,15 +11,16 @@
             width: 300px;
             height: 300px;
             margin-bottom: 20px;
+            display: inline-block; /* Dodaj inline-block, aby wykresy były obok siebie */
         }
         .statistics-container {
             margin-bottom: 20px;
         }
         .chart-container {
-            max-width: 1000px;
-            max-height: 800px;
-            overflow: auto;
-            margin-bottom: 20px;
+            width: 400px; /* Szerokość wykresów kolowych i histogramów */
+            height: 400px; /* Wysokość wykresów kolowych i histogramów */
+            display: inline-block; /* Dodaj inline-block, aby wykresy były obok siebie */
+            margin-right: 20px; /* Margines między wykresami */
         }
     </style>
 </head>
@@ -64,31 +65,45 @@
     <button type="submit">Generate more entries</button>
 </form>
 <h2>Box Plots and Statistics</h2>
-<div id="boxplot-statistics-container"></div>
+<div id="boxplot-statistics-container">
+    <!-- Tutaj będą umieszczone box ploty -->
+</div>
+
+<h2>Pie Charts and Histograms</h2>
+<div id="pie-histograms-container">
+    <!-- Tutaj będą umieszczone wykresy kołowe i histogramy -->
+</div>
 
 <script>
     var headers = document.querySelectorAll('thead th');
     var dataRows = document.querySelectorAll('tbody tr');
     var boxplotStatisticsContainer = document.getElementById('boxplot-statistics-container');
+    var pieHistogramsContainer = document.getElementById('pie-histograms-container');
+    var columnsWithBoxplot = new Set(); // Zbiór przechowujący nazwy kolumn, dla których wykonano już boxplot
 
     headers.forEach(function(header, index) {
         var columnName = header.innerText;
         var columnValues = [];
         dataRows.forEach(function(row) {
             var cell = row.cells[index];
-            var value = parseFloat(cell.innerText);
-            if (!isNaN(value)) {
-                columnValues.push(value);
-            }
+            var value = cell.innerText.trim(); // Pobierz tekst z komórki i usuń białe znaki z początku i końca
+            columnValues.push(value);
         });
 
         var allNumeric = columnValues.every(function(value) {
-            return !isNaN(value);
+            return !isNaN(parseFloat(value)); // Sprawdź, czy wszystkie wartości w kolumnie są liczbami
         });
 
         if (allNumeric && columnValues.length > 0) {
+            // Generuj boxplot dla danych liczbowych
+            var numericValues = columnValues.map(function(value) {
+                return parseFloat(value);
+            }).filter(function(value) {
+                return !isNaN(value); // Filtrowanie wartości liczbowych
+            });
+
             var boxplotData = [{
-                y: columnValues,
+                y: numericValues,
                 type: 'box',
                 name: columnName
             }];
@@ -96,30 +111,162 @@
             var layout = {
                 title: 'Box Plot for ' + columnName,
                 yaxis: {
-                    title: 'Values'
+                    title: 'Values',
+                    tickfont: {
+                        family: 'Arial, sans-serif',
+                        size: 12,
+                        color: '#333'
+                    },
+                    titlefont: {
+                        family: 'Arial, sans-serif',
+                        size: 14,
+                        color: '#555',
+                        weight: 'bold'
+                    }
+                },
+                titlefont: {
+                    family: 'Arial, sans-serif',
+                    size: 16,
+                    color: '#666',
+                    weight: 'bold'
                 }
             };
 
-            var plotDiv = document.createElement('div');
-            plotDiv.classList.add('boxplot-container');
-            plotDiv.id = 'boxplot-' + index;
-            boxplotStatisticsContainer.appendChild(plotDiv);
+            var plotContainer = document.createElement('div');
+            plotContainer.classList.add('boxplot-container');
+            boxplotStatisticsContainer.appendChild(plotContainer);
 
-            Plotly.newPlot('boxplot-' + index, boxplotData, layout);
+            Plotly.newPlot(plotContainer, boxplotData, layout);
 
-            var average = calculateColumnAverage(columnValues);
-            var median = calculateColumnMedian(columnValues);
-            var mode = calculateColumnMode(columnValues);
-            var standardDeviation = calculateColumnStandardDeviation(columnValues);
+            // Obliczamy statystyki dla boxplotów
+            var average = calculateColumnAverage(numericValues);
+            var median = calculateColumnMedian(numericValues);
+            var mode = calculateColumnMode(numericValues);
+            var standardDeviation = calculateColumnStandardDeviation(numericValues);
 
-            var statistics = document.createElement('div');
-            statistics.classList.add('statistics-container');
-            statistics.innerHTML = '<strong>Statistics for ' + columnName + ':</strong><br>' +
-                                    'Average: ' + (isNaN(average) ? 'N/A' : average.toFixed(2)) + '<br>' +
-                                    'Median: ' + (isNaN(median) ? 'N/A' : median.toFixed(2)) + '<br>' +
-                                    'Mode: ' + (isNaN(mode) ? 'N/A' : mode) + '<br>' +
-                                    'Standard Deviation: ' + (isNaN(standardDeviation) ? 'N/A' : standardDeviation.toFixed(2)) + '<br><br>';
-            boxplotStatisticsContainer.appendChild(statistics);
+            // Tworzymy kontener dla statystyk boxplotu
+            var statisticsContainer = document.createElement('div');
+            statisticsContainer.classList.add('statistics-container');
+            statisticsContainer.innerHTML = '<strong>Statistics for ' + columnName + ':</strong><br>' +
+                'Average: ' + (isNaN(average) ? 'N/A' : average.toFixed(2)) + '<br>' +
+                'Median: ' + (isNaN(median) ? 'N/A' : median.toFixed(2)) + '<br>' +
+                'Mode: ' + (isNaN(mode) ? 'N/A' : mode) + '<br>' +
+                'Standard Deviation: ' + (isNaN(standardDeviation) ? 'N/A' : standardDeviation.toFixed(2)) + '<br><br>';
+
+            // Dodajemy statystyki do kontenera
+            plotContainer.appendChild(statisticsContainer);
+
+            // Dodaj nazwę kolumny do zbioru, jeśli wykonano dla niej boxplot
+            columnsWithBoxplot.add(columnName);
+
+        } else {
+            // Generuj wykres kołowy lub histogram dla danych tekstowych, jeśli nie ma jeszcze boxplota dla tej kolumny
+            if (!columnsWithBoxplot.has(columnName)) {
+                var uniqueValues = [...new Set(columnValues)];
+                if (uniqueValues.length === 2) {
+                    // Generuj wykres kołowy dla dwóch unikalnych wartości tekstowych
+                    var ctx = document.createElement('canvas').getContext('2d');
+                    ctx.canvas.width = 400;
+                    ctx.canvas.height = 400;
+
+                    var colors = ['rgba(0, 128, 0, 0.5)', 'rgba(255, 165, 0, 0.5)'];
+                    var data = uniqueValues.map(function(value, i) {
+                        return {
+                            label: value.length > 16 ? value.substring(0, 16) + "..." : value,
+                            value: columnValues.filter(function(v) { return v === value; }).length,
+                            backgroundColor: colors[i % colors.length]
+                        };
+                    });
+
+                    var pieChart = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: data.map(function(d) { return d.label; }),
+                            datasets: [{
+                                data: data.map(function(d) { return d.value; }),
+                                backgroundColor: data.map(function(d) { return d.backgroundColor; })
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Pie Chart for ' + columnName,
+                                    font: {
+                                        size: 16,
+                                        weight: 'bold'
+                                    }
+                                },
+                                legend: {
+                                    display: true,
+                                    position: 'bottom'
+                                }
+                            },
+                            aspectRatio: 1,
+                            responsive: false
+                        }
+                    });
+
+                    var chartContainer = document.createElement('div');
+                    chartContainer.classList.add('chart-container');
+                    chartContainer.appendChild(ctx.canvas);
+                    pieHistogramsContainer.appendChild(chartContainer);
+
+                } else {
+                    // Generuj histogram dla więcej niż dwóch unikalnych wartości tekstowych
+                    var frequencyMap = {};
+                    columnValues.forEach(function(value) {
+                        frequencyMap[value] = (frequencyMap[value] || 0) + 1;
+                    });
+
+                    var labels = Object.keys(frequencyMap);
+                    var frequencies = Object.values(frequencyMap);
+
+                    var ctx = document.createElement('canvas').getContext('2d');
+                    ctx.canvas.width = 400;
+                    ctx.canvas.height = 400;
+
+                    var histogramLabels = labels.map(function(label) {
+                        return label.length > 16 ? label.substring(0, 16) + "..." : label;
+                    });
+
+                    var histogramChart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: histogramLabels,
+                            datasets: [{
+                                label: 'Frequency',
+                                data: frequencies,
+                                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                title: {
+                                    display: true,
+                                    text: 'Histogram for ' + columnName,
+                                    font: {
+                                        size: 16,
+                                        weight: 'bold'
+                                    }
+                                },
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            aspectRatio: 1,
+                            responsive: false
+                        }
+                    });
+
+                    var chartContainer = document.createElement('div');
+                    chartContainer.classList.add('chart-container');
+                    chartContainer.appendChild(ctx.canvas);
+                    pieHistogramsContainer.appendChild(chartContainer);
+                }
+            }
         }
     });
 
@@ -154,147 +301,7 @@
     }
 </script>
 
-<h2>Pie Charts and Histograms</h2>
-<script>
-    function generateHistogram(columnIndex) {
-        var values = [];
-        var rows = document.querySelectorAll('tbody tr');
 
-        rows.forEach(function(row) {
-            var cell = row.cells[columnIndex];
-            values.push(cell.innerText);
-        });
-
-        var uniqueValues = [...new Set(values)];
-
-        if (uniqueValues.length > 2) {
-            var frequencyMap = {};
-            values.forEach(function(value) {
-                if (frequencyMap[value]) {
-                    frequencyMap[value]++;
-                } else {
-                    frequencyMap[value] = 1;
-                }
-            });
-
-            var labels = Object.keys(frequencyMap);
-            var frequencies = Object.values(frequencyMap);
-
-            labels = labels.map(label => label.length > 20 ? label.substring(0, 20) + "..." : label); // Skróć etykiety
-
-            var ctx = document.createElement('canvas').getContext('2d');
-            ctx.canvas.width = 400;
-            ctx.canvas.height = 400;
-            var histogramChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Frequency',
-                        data: frequencies,
-                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Histogram for ' + headers[columnIndex].innerText,
-                            font: {
-                                size: 12,
-                                weight: 'bold'
-                            }
-                        },
-                        legend: {
-                            display: false
-                        }
-                    },
-                    aspectRatio: 1, // Zwiększ proporcje wykresu
-                    responsive: false // Wyłącz responsywność
-                }
-            });
-
-            var chartContainer = document.createElement('div');
-            chartContainer.classList.add('chart-container'); // Dodaj klasę dla kontenera
-            chartContainer.appendChild(ctx.canvas);
-            document.body.appendChild(chartContainer);
-        } else {
-            var colors = ['rgba(0, 128, 0, 0.5)', 'rgba(255, 165, 0, 0.5)'];
-            var data = [];
-            uniqueValues.forEach(function(value, i) {
-                var count = values.filter(function(v) {
-                    return v === value;
-                }).length;
-                data.push({
-                    label: value.length > 20 ? value.substring(0, 20) + "..." : value,
-                    value: count,
-                    backgroundColor: colors[i % colors.length]
-                });
-            });
-
-            var ctx = document.createElement('canvas').getContext('2d');
-            var pieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: uniqueValues.map(v => v.length > 20 ? v.substring(0, 20) + "..." : v),
-                    datasets: [{
-                        data: data.map(d => d.value),
-                        backgroundColor: data.map(d => d.backgroundColor)
-                    }]
-                },
-                options: {
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Pie Chart for ' + headers[columnIndex].innerText,
-                            font: {
-                                size: 12,
-                                weight: 'bold'
-                            }
-                        },
-                        legend: {
-                            display: true,
-                            position: 'bottom'
-                        }
-                    },
-                    aspectRatio: 1, // Zwiększ proporcje wykresu
-                    responsive: false // Wyłącz responsywność
-                }
-            });
-
-            var chartContainer = document.createElement('div');
-            chartContainer.classList.add('chart-container'); // Dodaj klasę dla kontenera
-            chartContainer.appendChild(ctx.canvas);
-            document.body.appendChild(chartContainer);
-        }
-
-    }
-
-    var headers = document.querySelectorAll('thead th');
-    headers.forEach(function(header, index) {
-        var columnName = header.innerText;
-        var columnValues = [];
-        var numericColumn = true;
-
-        dataRows.forEach(function(row, rowIndex) {
-            if (rowIndex > 0) {
-                var cell = row.cells[index];
-                var value = parseFloat(cell.innerText);
-                if (!isNaN(value)) {
-                    columnValues.push(value);
-                } else {
-                    numericColumn = false;
-                }
-            }
-        });
-
-        if (!numericColumn) {
-            generateHistogram(index);
-        }
-    });
-</script>
 
 <a href="/download_csv?csv_file={{ csv_file }}">Download CSV</a>
 <br>

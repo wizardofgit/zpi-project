@@ -38,29 +38,31 @@ def generate_pdf_from_data(headers, data_list):
         pdf.cell(cell_width, 10, header, border=1)
     pdf.ln()
 
-    unique_data_set = set()
+    print("--------------")
+    print(len(data_list))
+    data_list = data_list[len(data_list) // 2:]
+    print(len(data_list))
+    print(len(headers))
+    print([len(x) for x in data_list])
 
-    # dlatego trzeba znalezc unikatowe, bo zauwazylem, ze kazdy wiersz sie zdublowal
-    print('Ile mamy wierszy danych: ', len(data_list))
-    for row in data_list:
-        row_tuple = tuple(row)
-        if row_tuple not in unique_data_set:
-            for item in row:
-                pdf.set_font("Arial", size=8)
-                pdf.cell(cell_width, 10, str(item), border=1)
-            pdf.ln()
-            unique_data_set.add(row_tuple)
+    # czasem jest za duzo wartosci w jednym wierszu, a czasem za malo
+    # jesli za duzo to usuwam ostatnie wartosci tak zeby zgadzala sie ich ilosc z iloscia atrybutow
+    # jesli jest ich za malo, to po prostu kopiuje wartosci z pierwszej kolumny tyle razy, ile trzeba
+    data_list = [
+        x[:len(headers)] + [x[0]] * (len(headers) - len(x)) if len(x) < len(headers) else x[:len(headers)] for x
+        in data_list]
 
-    pdf.ln()
+    print("--------------")
+    print("--------------")
+    print(len(headers))
+    print([len(x) for x in data_list])
 
-    df = pd.DataFrame(unique_data_set, columns=headers)
-
-    df.drop_duplicates(inplace=True)
+    df = pd.DataFrame(data_list, columns=headers)
 
     df = convert_to_numeric(df)
 
     df.info()
-
+    '''
     for column in df.columns:
         if df[column].dtype in ['int64', 'float64', 'int32']:
             mean_val = df[column].mean()
@@ -142,7 +144,7 @@ def generate_pdf_from_data(headers, data_list):
             pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
 
             pdf.ln(100)
-
+            '''
     with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
         pdf.output(temp_file.name)
 
