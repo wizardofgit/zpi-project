@@ -1,15 +1,15 @@
+import matplotlib
 import flask
 import openai
 import json
 import io
 import csv
-import tempfile
-from fpdf import FPDF
-from matplotlib import pyplot as plt
 import seaborn as sns
-import pandas as pd
-import numpy as np
 import re
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import tempfile
 
 app = flask.Flask(__name__)
 
@@ -28,22 +28,12 @@ def verify_config_file():
         raise "No config file found"
 
 
-def generate_pdf_from_data(headers, data_list):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=8)
-    cell_width = 20  # Nowa szerokość komórki
-    for header in headers:
-        pdf.set_font("Arial", size=8, style='B')
-        pdf.cell(cell_width, 10, header, border=1)
-    pdf.ln()
+def generate_pdf_from_data(headers, data_list, records_to_generate):
+    matplotlib.use('TkAgg')
+    figures = list()
 
-    print("--------------")
-    print(len(data_list))
-    data_list = data_list[len(data_list) // 2:]
-    print(len(data_list))
-    print(len(headers))
-    print([len(x) for x in data_list])
+    if len(data_list) != records_to_generate:
+        data_list = data_list[:len(data_list) // 2]
 
     # czasem jest za duzo wartosci w jednym wierszu, a czasem za malo
     # jesli za duzo to usuwam ostatnie wartosci tak zeby zgadzala sie ich ilosc z iloscia atrybutow
@@ -51,117 +41,167 @@ def generate_pdf_from_data(headers, data_list):
     data_list = [
         x[:len(headers)] + [x[0]] * (len(headers) - len(x)) if len(x) < len(headers) else x[:len(headers)] for x
         in data_list]
-
-    print("--------------")
-    print("--------------")
-    print(len(headers))
-    print([len(x) for x in data_list])
-
     df = pd.DataFrame(data_list, columns=headers)
-
     df = convert_to_numeric(df)
-
-    df.info()
-    '''
+    fig = create_table_pdf(df, headers)
+    figures.append(fig)
     for column in df.columns:
-        if df[column].dtype in ['int64', 'float64', 'int32']:
-            mean_val = df[column].mean()
-            median_val = df[column].median()
-            mode_val = df[column].mode()[0]
-            std_val = df[column].std()
+        create_box_plot_pdf(figures, df, column)
+    for column in df.columns:
+        create_pie_chart_pdf(figures, df, column)
+    for column in df.columns:
+        create_hist_plot_pdf(figures, df, column)
+    numerical_columns = df.select_dtypes(include=['float64', 'int64', 'int32']).columns
+    if numerical_columns.empty:
+        print("Brak zmiennych numerycznych do wygenerowania pairplota.")
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
+            with PdfPages(temp_file) as pdf:
+                for figure in figures:
+                    pdf.savefig(figure, bbox_inches='tight')
+    else:
+        pairplot = sns.pairplot(df)
+        with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
+            with PdfPages(temp_file) as pdf:
+                for figure in figures:
+                    pdf.savefig(figure, bbox_inches='tight')
+                pdf.savefig(pairplot.fig)
+    return temp_file.name
 
-            pdf.set_font("Arial", size=12, style='B')
-            pdf.cell(0, 10, f"Statystyki kolumny {column}:", ln=True)
-            pdf.set_font("Arial", size=12)
-            pdf.cell(0, 10, f"srednia: {mean_val}", ln=True)
-            pdf.cell(0, 10, f"mediana: {median_val}", ln=True)
-            pdf.cell(0, 10, f"moda: {mode_val}", ln=True)
-            pdf.cell(0, 10, f"odchylenie standardowe: {std_val}", ln=True)
 
-            unique_values = df[column].nunique()
-            if unique_values <= 2:
-                # Tworzymy wykres kołowy dla zmiennych numerycznych
-                plt.figure(figsize=(6, 4))
-                df[column].value_counts().plot(kind='pie', autopct='%1.1f%%')
-                plt.title(f"Wykres kołowy dla {column}")
-                plt.legend(labels=df[column].unique(), loc="best")
-                plt.axis('equal')
+def create_box_plot_pdf(figures, df, column):
+    if df[column].dtype in ['int64', 'float64', 'int32']:
+        mean_val = df[column].mean()
+        median_val = df[column].median()
+        mode_val = df[column].mode()[0]
+        std_val = df[column].std()
+        fig = plt.figure(figsize=(8, 10))
 
-                for text in plt.gca().texts:
-                    if '%' in text.get_text():
-                        text.set_fontsize(12)
-                        text.set_weight('bold')
+        ax1 = fig.add_subplot(3, 1, 1)
+        sns.boxplot(data=df, x=column, ax=ax1)
+        ax1.set_title(f"Wykres pudełkowy dla {column}")
+        ax1.set_xlabel(column)
+        ax1.set_ylabel("Wartość")
 
-                temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                plt.savefig(temp_image_file.name)
-                plt.close()
+        ax2 = fig.add_subplot(3, 1, 2)
+        info_text = f"Średnia: {round(mean_val, 2)}\nMediana: {round(median_val, 2)}\nModa: {round(mode_val, 2)}\nOdchylenie standardowe: {round(std_val, 2)}"
+        ax2.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12)
+        ax2.axis('off')
+        figures.append(fig)
 
-                if pdf.get_y() > 200:
-                    pdf.add_page()
 
-                pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
-                pdf.ln(100)
-            else:
-                plt.figure(figsize=(6, 4))
-                sns.boxplot(data=df, x=column)
-                plt.title(f"Wykres pudełkowy dla {column}")
-                plt.xlabel(column)
-                plt.ylabel("Wartość")
-                temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                plt.savefig(temp_image_file.name)
-                plt.close()
+def create_pie_chart_pdf(figures, df, column):
+    if df[column].dtype not in ['int64', 'float64', 'int32']:
+        unique_values = df[column].nunique()
+        if unique_values <= 2:
+            fig = plt.figure(figsize=(8, 6))
+            df[column].value_counts().plot(kind='pie', autopct='%1.1f%%')
+            plt.title(f"Wykres kołowy dla {column}")
+            plt.legend(labels=df[column].unique(), loc="best")
+            plt.axis('equal')
+            figures.append(fig)
 
-                if pdf.get_y() > 200:
-                    pdf.add_page()
 
-                pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
-                pdf.ln(100)
-        else:
-            plt.figure(figsize=(6, 4))
-            sns.histplot(data=df, x=column, discrete=True, stat='count')
+def create_hist_plot_pdf(figures, df, column):
+    if df[column].dtype not in ['int64', 'float64', 'int32']:
+        unique_values = df[column].nunique()
+        if unique_values > 2:
+            fig = plt.figure(figsize=(8, 6))
+            ax = sns.histplot(data=df, x=column, discrete=True, stat='count')
             plt.title(f"Histogram dla {column}")
             plt.xlabel(column)
             plt.ylabel("Liczba wystąpień")
 
-            values, counts = np.unique(df[column], return_counts=True)
+            max_label_length = 13
 
-            x_labels = range(len(values))
+            unique_values = df[column].unique()
+            xtick_labels = [str(val) for val in unique_values]
 
-            plt.xticks(x_labels, [f'{i + 1}' for i in x_labels])
-            pdf.set_font("Arial", size=12, style='B')
-            pdf.cell(200, 10, txt=f"Legenda dla histogramu {column}", ln=True)
-            pdf.set_font("Arial", size=9)
-            for i, value in enumerate(values, start=1):
-                pdf.cell(200, 10, txt=f"{i}: {value}", ln=True)
+            truncated_xtick_labels = [label[:max_label_length] + '...' if len(label) > max_label_length else label
+                                      for label in xtick_labels]
 
-            temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-            plt.savefig(temp_image_file.name)
-            plt.close()
+            ax.set_xticks(unique_values)
+            ax.set_xticklabels(truncated_xtick_labels)
+            ax.tick_params(axis='x', labelsize=10, rotation=30)
 
-            if pdf.get_y() > 200:
-                pdf.add_page()
+            figures.append(fig)
 
-            pdf.image(temp_image_file.name, x=pdf.l_margin, y=pdf.get_y(), w=140)
 
-            pdf.ln(100)
-            '''
-    with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
-        pdf.output(temp_file.name)
+def create_table_pdf(df, headers):
+    max_header_length = 24
+    max_cell_length = 16
 
-    return temp_file.name
+    truncated_headers = [truncate_and_split_text(header, max_header_length) for header in headers]
+
+    table_data = []
+    for row in df.values.tolist():
+        processed_row = []
+        for cell in row:
+            processed_cell = str(cell)
+            if len(processed_cell) > max_cell_length:
+                processed_cell = truncate_and_split_text(processed_cell, max_cell_length)
+            processed_row.append(processed_cell)
+        table_data.append(processed_row)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.axis('off')
+
+    table = ax.table(cellText=table_data, colLabels=truncated_headers, loc='upper center', cellLoc='center',
+                     colColours=['lightgray'] * len(headers))
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(4)
+    table.scale(1.2, 1.2)
+
+    return fig
+
+
+def truncate_and_split_text(text, max_length):
+    truncated_text = text[:max_length] + '...' if len(text) > max_length else text
+    lines = split_text(truncated_text, max_length)
+    return '\n'.join(lines)
+
+
+def split_text(text, max_length):
+    words = text.split()
+    lines = []
+    current_line = ''
+
+    for word in words:
+        if len(current_line) + len(word) + 1 <= max_length:
+            current_line += word + ' '
+        else:
+            lines.append(current_line)
+            current_line = word + ' '
+
+    if current_line:
+        lines.append(current_line)
+
+    return lines
 
 
 def extract_numeric_value(text):
-    match = re.search(r'(\d+\.?\d*)', text)
-    if match:
-        return float(match.group())
-    else:
+    try:
+        if len(text) > 12:
+            return text
+
+        match = re.match(r'^\d+\.?\d*', text)
+        if match:
+            numeric_value = float(match.group(0))
+            return numeric_value
+        else:
+            return text
+    except (AttributeError, ValueError):
         return text
+
+
+def all_values_are_numeric(column):
+    return all(isinstance(val, (int, float)) for val in column)
 
 
 def convert_to_numeric(df):
     for col in df.columns:
-        df[col] = df[col].apply(lambda x: extract_numeric_value(x))
+        if all_values_are_numeric(df[col].apply(lambda x: extract_numeric_value(x))):
+            df[col] = df[col].apply(lambda x: extract_numeric_value(x))
     return df
 
 
@@ -296,7 +336,7 @@ def generate_prompt():
             temp_file_path = temp_file.name
 
         # Wywołaj funkcję pomocniczą do generowania pliku PDF
-        pdf_file_path = generate_pdf_from_data(headers, data_list)
+        pdf_file_path = generate_pdf_from_data(headers, data_list, records_to_generate)
 
         # Pass data to HTML template
         return flask.render_template("table.html", headers=headers, data=data_list[:records_to_generate],
