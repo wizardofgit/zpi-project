@@ -7,6 +7,10 @@ import csv
 import seaborn as sns
 import re
 import pandas as pd
+import matplotlib
+
+matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
@@ -14,8 +18,9 @@ import os
 
 app = flask.Flask(__name__)
 
+API_KEY = json.load(open(os.path.join(os.path.dirname(__file__), "config.json"), 'r'))["openai_api_credentials"][
+    "api_key"]
 
-API_KEY = json.load(open(os.path.join(os.path.dirname(__file__), "config.json"), 'r'))["openai_api_credentials"]["api_key"]
 
 def verify_config_file():
     """Verify if the config file exists and contains the openai_api_credentials"""
@@ -30,7 +35,6 @@ def verify_config_file():
 
 
 def generate_pdf_from_data(headers, data_list, records_to_generate):
-    matplotlib.use('TkAgg')
     figures = list()
 
     if len(data_list) != records_to_generate:
