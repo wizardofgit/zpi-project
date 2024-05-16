@@ -7,10 +7,6 @@ import csv
 import seaborn as sns
 import re
 import pandas as pd
-import matplotlib
-
-matplotlib.use('TkAgg')
-
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
@@ -35,6 +31,7 @@ def verify_config_file():
 
 
 def generate_pdf_from_data(headers, data_list, records_to_generate):
+    matplotlib.use('Agg')
     figures = list()
 
     if len(data_list) != records_to_generate:
