@@ -14,8 +14,8 @@ import os
 
 app = flask.Flask(__name__)
 
-API_KEY = json.load(open("config.json", "r"))["openai_api_credentials"]["api_key"]
 
+API_KEY = json.load(os.path.join(os.path.dirname(__file__), "config.json"), "r")["openai_api_credentials"]["api_key"]
 
 def verify_config_file():
     """Verify if the config file exists and contains the openai_api_credentials"""
