@@ -10,6 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
+import os
+import pathlib
 
 app = flask.Flask(__name__)
 
@@ -19,7 +21,7 @@ API_KEY = json.load(open("config.json", "r"))["openai_api_credentials"]["api_key
 def verify_config_file():
     """Verify if the config file exists and contains the openai_api_credentials"""
     try:
-        with open("config.json", "r") as file:
+        with open(os.path.join(os.path.dirname(__file__), "config.json"), "r") as file:
             try:
                 json.load(file)["openai_api_credentials"]["api_key"]
             except KeyError:
