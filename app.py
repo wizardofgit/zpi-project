@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import tempfile
 import os
-import pathlib
 
 app = flask.Flask(__name__)
 
