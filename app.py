@@ -88,19 +88,19 @@ def generate_pdf_from_data(headers, data_list, records_to_generate):
 
     toc = [('Tabela danych', 'tabela')] + chart_streams
 
-    flowables.append(Paragraph('<font size="100">Spis tresci</font>', styles['Title']))  # Zwiększona czcionka
+    flowables.append(Paragraph('<font size="70">Spis tresci</font>', styles['Title']))  # Zwiększona czcionka
     flowables.append(Spacer(1, 120))
 
     for idx, (title, _) in enumerate(toc, start=1):
         link_style = styles['Normal']
-        link_style.fontSize = 30
+        link_style.fontSize = 15
         link_style.alignment = 1
         flowables.append(Paragraph(f'<a href="#{idx}">{idx}. {title}</a>', link_style))
-        flowables.append(Spacer(1, 25))
+        flowables.append(Spacer(1, 16))
 
     flowables.append(PageBreak())
     flowables.append(Paragraph(f'<a name="1"></a>', styles['Normal']))
-    flowables.append(Paragraph('Tabela danych', styles['Title']))
+    flowables.append(Paragraph('1. Tabela danych', styles['Title']))
     flowables.append(Spacer(1, 12))
     flowables.append(add_table(df))
 
