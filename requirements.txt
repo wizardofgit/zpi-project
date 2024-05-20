@@ -10,3 +10,4 @@ seaborn
 pandas
 numpy
 re
+reportlab

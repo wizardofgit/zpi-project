@@ -2,15 +2,19 @@ import matplotlib
 import flask
 import openai
 import json
-import io
 import csv
-import seaborn as sns
 import re
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import tempfile
 import os
+import io
+import matplotlib.pyplot as plt
+from reportlab.lib.pagesizes import A2
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+import seaborn as sns
+import pandas as pd
+import tempfile
 
 app = flask.Flask(__name__)
 
@@ -32,7 +36,6 @@ def verify_config_file():
 
 def generate_pdf_from_data(headers, data_list, records_to_generate):
     matplotlib.use('Agg')
-    figures = list()
 
     if len(data_list) != records_to_generate:
         data_list = data_list[:len(data_list) // 2]
@@ -45,32 +48,120 @@ def generate_pdf_from_data(headers, data_list, records_to_generate):
         in data_list]
     df = pd.DataFrame(data_list, columns=headers)
     df = convert_to_numeric(df)
-    fig = create_table_pdf(df, headers)
-    figures.append(fig)
+    chart_streams = []
+
     for column in df.columns:
-        create_box_plot_pdf(figures, df, column)
+        create_box_plot_pdf(chart_streams, df, column)
+
     for column in df.columns:
-        create_pie_chart_pdf(figures, df, column)
+        create_pie_chart_pdf(chart_streams, df, column)
+
     for column in df.columns:
-        create_hist_plot_pdf(figures, df, column)
+        create_hist_plot_pdf(chart_streams, df, column)
+
     numerical_columns = df.select_dtypes(include=['float64', 'int64', 'int32']).columns
+    non_numerical_columns = df.select_dtypes(exclude=['float64', 'int64', 'int32']).columns
+
+    # pairplots
     if numerical_columns.empty:
         print("Brak zmiennych numerycznych do wygenerowania pairplota.")
-        with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
-            with PdfPages(temp_file) as pdf:
-                for figure in figures:
-                    pdf.savefig(figure, bbox_inches='tight')
     else:
         pairplot = sns.pairplot(df)
-        with tempfile.NamedTemporaryFile(mode='w+b', delete=False, suffix='.pdf') as temp_file:
-            with PdfPages(temp_file) as pdf:
-                for figure in figures:
-                    pdf.savefig(figure, bbox_inches='tight')
-                pdf.savefig(pairplot.fig)
+        pairplot_stream = io.BytesIO()
+        pairplot.savefig(pairplot_stream, format='png')
+        pairplot_stream.seek(0)
+        chart_streams.append(('Seaborn Pairplot', pairplot_stream))
+
+        for col in non_numerical_columns:
+            pairplot_hue = sns.pairplot(df, hue=col)
+            pairplot_hue_stream = io.BytesIO()
+            pairplot_hue.savefig(pairplot_hue_stream, format='png')
+            pairplot_hue_stream.seek(0)
+            chart_streams.append((f'Seaborn Pairplot_{col}', pairplot_hue_stream))
+
+    # Tworzenie PDF ze spisem treści
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    doc = SimpleDocTemplate(temp_file.name, pagesize=A2)
+    page_width, page_height = A2
+    styles = getSampleStyleSheet()
+    flowables = []
+
+    toc = [('Tabela danych', 'tabela')] + chart_streams
+
+    flowables.append(Paragraph('<font size="100">Spis tresci</font>', styles['Title']))  # Zwiększona czcionka
+    flowables.append(Spacer(1, 120))
+
+    for idx, (title, _) in enumerate(toc, start=1):
+        link_style = styles['Normal']
+        link_style.fontSize = 30
+        link_style.alignment = 1
+        flowables.append(Paragraph(f'<a href="#{idx}">{idx}. {title}</a>', link_style))
+        flowables.append(Spacer(1, 25))
+
+    flowables.append(PageBreak())
+    flowables.append(Paragraph(f'<a name="1"></a>', styles['Normal']))
+    flowables.append(Paragraph('Tabela danych', styles['Title']))
+    flowables.append(Spacer(1, 12))
+    flowables.append(add_table(df))
+
+    for idx, (title, chart_stream) in enumerate(toc[1:], start=2):
+        flowables.append(PageBreak())
+        flowables.append(Paragraph(f'<a name="{idx}"></a>', styles['Normal']))
+        flowables.append(Paragraph(f'{idx}. {title}', styles['Title']))
+        flowables.append(Spacer(1, 12))
+
+        image = Image(chart_stream)
+        image_width, image_height = image.drawWidth, image.drawHeight
+        scale_x = page_width / image_width
+        scale_y = page_height / image_height
+        scale_factor = min(scale_x, scale_y)
+        new_width = image_width * scale_factor * 0.95
+        new_height = image_height * scale_factor * 0.95
+
+        image.drawWidth = new_width
+        image.drawHeight = new_height
+        flowables.append(image)
+        flowables.append(Spacer(1, 12))
+
+    # Generowanie PDF
+    doc.build(flowables)
     return temp_file.name
 
 
-def create_box_plot_pdf(figures, df, column):
+def add_table(data):
+    header = list(data.keys())
+    rows = [header]
+    for i in range(len(data[header[0]])):
+        row = [truncate_and_split_text(str(data[key][i])) for key in header]
+        rows.append(row)
+
+    table = Table(rows)
+    max_page_width = A2[0] - 2 * inch
+    num_columns = len(header)
+    col_width = max_page_width / num_columns
+
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ])
+
+    table.setStyle(style)
+    table._argW = [col_width] * num_columns
+    return table
+
+
+def create_box_plot_pdf(chart_streams, df, column):
     if df[column].dtype in ['int64', 'float64', 'int32']:
         mean_val = df[column].mean()
         median_val = df[column].median()
@@ -88,30 +179,40 @@ def create_box_plot_pdf(figures, df, column):
         info_text = f"Średnia: {round(mean_val, 2)}\nMediana: {round(median_val, 2)}\nModa: {round(mode_val, 2)}\nOdchylenie standardowe: {round(std_val, 2)}"
         ax2.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12)
         ax2.axis('off')
-        figures.append(fig)
+        histogram_stream = io.BytesIO()
+        plt.savefig(histogram_stream, format='png')
+        histogram_stream.seek(0)
+        chart_streams.append(
+            (f'BoxPlot_{column}', histogram_stream))
 
 
-def create_pie_chart_pdf(figures, df, column):
+def create_pie_chart_pdf(chart_streams, df, column):
     if df[column].dtype not in ['int64', 'float64', 'int32']:
         unique_values = df[column].nunique()
         if unique_values <= 2:
-            fig = plt.figure(figsize=(8, 6))
+            fig = plt.figure(figsize=(8, 10))
+            ax1 = fig.add_subplot(1, 1, 1)
             df[column].value_counts().plot(kind='pie', autopct='%1.1f%%')
-            plt.title(f"Wykres kołowy dla {column}")
-            plt.legend(labels=df[column].unique(), loc="best")
+            ax1.set_title(f"Wykres kołowy dla {column}")
+            ax1.legend(labels=df[column].unique(), loc="best")
             plt.axis('equal')
-            figures.append(fig)
+            histogram_stream = io.BytesIO()
+            plt.savefig(histogram_stream, format='png')
+            histogram_stream.seek(0)
+            chart_streams.append(
+                (f'PieChart_{column}', histogram_stream))
 
 
-def create_hist_plot_pdf(figures, df, column):
+def create_hist_plot_pdf(chart_streams, df, column):
     if df[column].dtype not in ['int64', 'float64', 'int32']:
         unique_values = df[column].nunique()
         if unique_values > 2:
-            fig = plt.figure(figsize=(8, 6))
-            ax = sns.histplot(data=df, x=column, discrete=True, stat='count')
-            plt.title(f"Histogram dla {column}")
-            plt.xlabel(column)
-            plt.ylabel("Liczba wystąpień")
+            fig = plt.figure(figsize=(8, 10))
+            ax1 = fig.add_subplot(1, 1, 1)
+            sns.histplot(data=df, x=column, discrete=True, stat='count')
+            ax1.set_title(f"Histogram dla {column}")
+            ax1.set_xlabel(column)
+            ax1.set_ylabel("Liczba wystąpień")
 
             max_label_length = 13
 
@@ -121,49 +222,26 @@ def create_hist_plot_pdf(figures, df, column):
             truncated_xtick_labels = [label[:max_label_length] + '...' if len(label) > max_label_length else label
                                       for label in xtick_labels]
 
-            ax.set_xticks(unique_values)
-            ax.set_xticklabels(truncated_xtick_labels)
-            ax.tick_params(axis='x', labelsize=10, rotation=30)
+            ax1.set_xticks(unique_values)
+            ax1.set_xticklabels(truncated_xtick_labels)
+            ax1.tick_params(axis='x', labelsize=10, rotation=30)
 
-            figures.append(fig)
-
-
-def create_table_pdf(df, headers):
-    max_header_length = 24
-    max_cell_length = 16
-
-    truncated_headers = [truncate_and_split_text(header, max_header_length) for header in headers]
-
-    table_data = []
-    for row in df.values.tolist():
-        processed_row = []
-        for cell in row:
-            processed_cell = str(cell)
-            if len(processed_cell) > max_cell_length:
-                processed_cell = truncate_and_split_text(processed_cell, max_cell_length)
-            processed_row.append(processed_cell)
-        table_data.append(processed_row)
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.axis('off')
-
-    table = ax.table(cellText=table_data, colLabels=truncated_headers, loc='upper center', cellLoc='center',
-                     colColours=['lightgray'] * len(headers))
-
-    table.auto_set_font_size(False)
-    table.set_fontsize(4)
-    table.scale(1.2, 1.2)
-
-    return fig
+            histogram_stream = io.BytesIO()
+            plt.savefig(histogram_stream, format='png')
+            histogram_stream.seek(0)
+            chart_streams.append(
+                (f'HistogramChart_{column}', histogram_stream))
 
 
-def truncate_and_split_text(text, max_length):
+def truncate_and_split_text(text):
+    max_length = 24
     truncated_text = text[:max_length] + '...' if len(text) > max_length else text
-    lines = split_text(truncated_text, max_length)
+    lines = split_text(truncated_text)
     return '\n'.join(lines)
 
 
-def split_text(text, max_length):
+def split_text(text):
+    max_length = 16
     words = text.split()
     lines = []
     current_line = ''
@@ -172,11 +250,11 @@ def split_text(text, max_length):
         if len(current_line) + len(word) + 1 <= max_length:
             current_line += word + ' '
         else:
-            lines.append(current_line)
+            lines.append(current_line.strip())
             current_line = word + ' '
 
     if current_line:
-        lines.append(current_line)
+        lines.append(current_line.strip())
 
     return lines
 
@@ -339,7 +417,7 @@ def generate_prompt():
 
         # Wywołaj funkcję pomocniczą do generowania pliku PDF
         pdf_file_path = generate_pdf_from_data(headers, data_list, records_to_generate)
-
+        print(pdf_file_path)
         # Pass data to HTML template
         return flask.render_template("table.html", headers=headers, data=data_list[:records_to_generate],
                                      csv_file=temp_file_path,
