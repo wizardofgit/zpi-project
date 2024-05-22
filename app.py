@@ -15,6 +15,7 @@ from reportlab.lib.units import inch
 import seaborn as sns
 import pandas as pd
 import tempfile
+import numpy as np
 
 app = flask.Flask(__name__)
 
@@ -61,6 +62,8 @@ def generate_pdf_from_data(headers, data_list, records_to_generate):
 
     numerical_columns = df.select_dtypes(include=['float64', 'int64', 'int32']).columns
     non_numerical_columns = df.select_dtypes(exclude=['float64', 'int64', 'int32']).columns
+    if len(non_numerical_columns) > 2:
+        non_numerical_columns = np.random.choice(non_numerical_columns, size=2, replace=False)
 
     # pairplots
     if numerical_columns.empty:
