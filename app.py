@@ -37,10 +37,7 @@ def verify_config_file():
 
 def generate_pdf_from_data(headers, data_list, records_to_generate):
     matplotlib.use('Agg')
-
-    if len(data_list) != records_to_generate:
-        data_list = data_list[:len(data_list) // 2]
-
+    print(len(data_list))
     # czasem jest za duzo wartosci w jednym wierszu, a czasem za malo
     # jesli za duzo to usuwam ostatnie wartosci tak zeby zgadzala sie ich ilosc z iloscia atrybutow
     # jesli jest ich za malo, to po prostu kopiuje wartosci z pierwszej kolumny tyle razy, ile trzeba
@@ -137,7 +134,6 @@ def add_table(data):
     for i in range(len(data[header[0]])):
         row = [truncate_and_split_text(str(data[key][i])) for key in header]
         rows.append(row)
-
     table = Table(rows)
     max_page_width = A2[0] - 2 * inch
     num_columns = len(header)
@@ -237,29 +233,9 @@ def create_hist_plot_pdf(chart_streams, df, column):
 
 
 def truncate_and_split_text(text):
-    max_length = 24
+    max_length = 13
     truncated_text = text[:max_length] + '...' if len(text) > max_length else text
-    lines = split_text(truncated_text)
-    return '\n'.join(lines)
-
-
-def split_text(text):
-    max_length = 16
-    words = text.split()
-    lines = []
-    current_line = ''
-
-    for word in words:
-        if len(current_line) + len(word) + 1 <= max_length:
-            current_line += word + ' '
-        else:
-            lines.append(current_line.strip())
-            current_line = word + ' '
-
-    if current_line:
-        lines.append(current_line.strip())
-
-    return lines
+    return truncated_text
 
 
 def extract_numeric_value(text):
@@ -406,6 +382,13 @@ def generate_prompt():
             del headers[index]
 
         print("len of datalist:", len(data_list), " ", data_list)
+        print('tyle jest', len(data_list))
+        print('tyle ma byc', records_to_generate)
+
+        if len(data_list) > records_to_generate:
+            data_list = data_list[:records_to_generate]
+        print('po usunieciu nadmiarowych', len(data_list))
+
         # remove spaces in records
         # Czy jest to potrzebne? Jeżeli tak to wypadałoby to zrobić tak by nie niszczyć tekstów ze spacjami. MS
         # for i in range(len(data_list)):
@@ -465,26 +448,6 @@ def home_page():
     - Upload csv file with patient data"""
 
     return flask.render_template("homepage.html")
-
-
-@app.route('/generic_prompt', methods=['GET'])
-def generic_prompt():
-    """Testing site for the GPT-3 API that allows to create a generic prompt"""
-
-    prompt = "Generate 10-record patient database containing relevant patient information and their tests' results"
-
-    client = openai.Client(api_key=API_KEY)
-
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {'role': 'system', 'content': prompt}
-        ]
-    )
-
-    client.close()
-
-    return response.choices[0].message.content
 
 
 @app.route('/download_csv')
